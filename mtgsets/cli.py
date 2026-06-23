@@ -153,8 +153,7 @@ def _add_one_set(conn, set_code: str) -> str:
     except scryfall.ScryfallError as exc:
         if exc.status_code == 404:
             console.print(
-                f"[red]Failed {display_code}:[/red] No set found "
-                "(try [bold]mtgsets search[/bold])."
+                f"[red]Failed {display_code}:[/red] No set found (try [bold]mtgsets search[/bold])."
             )
         else:
             console.print(f"[red]Failed {display_code}:[/red] Scryfall request failed: {exc}")
