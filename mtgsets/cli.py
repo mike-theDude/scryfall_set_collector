@@ -15,7 +15,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from . import db, scryfall
+from . import collection, db, scryfall
 
 app = typer.Typer(
     name="mtgsets",
@@ -84,10 +84,55 @@ def search(query: str = typer.Argument(..., help="Set name or code substring."))
     console.print(f"[green]{len(matches)}[/green] set(s) found.")
 
 
+def _load_set(set_code: str) -> tuple[dict, list[dict]]:
+    """Fetch a set object and all its printings, or exit with a message."""
+    code = set_code.strip().lower()
+    try:
+        with scryfall.ScryfallClient() as client:
+            set_obj = client.get_set(code)
+            cards = client.get_set_cards(code)
+    except scryfall.ScryfallError as exc:
+        if exc.status_code == 404:
+            console.print(
+                f"[red]No set found[/red] with code [bold]{set_code.upper()}[/bold]. "
+                "Try [bold]mtgsets search[/bold]."
+            )
+        else:
+            console.print(f"[red]Scryfall request failed:[/red] {exc}")
+        raise typer.Exit(1)
+    return set_obj, cards
+
+
 @app.command()
 def preview(set_code: str = typer.Argument(..., help="Set code, e.g. NEO.")) -> None:
-    """Show included/excluded cards before adding a set (issue #6)."""
-    console.print(f"preview {set_code.upper()}: {_TODO}")
+    """Show the included/excluded breakdown before adding a set."""
+    set_obj, cards = _load_set(set_code)
+    breakdown = collection.build_breakdown(cards)
+
+    code = (set_obj.get("code") or set_code).upper()
+    console.print(f"\n[bold]Set:[/bold] {set_obj.get('name', '?')} ([cyan]{code}[/cyan])\n")
+
+    console.print("[green]Included:[/green]")
+    console.print(f"  Regular main-set cards   {len(breakdown.main_cards):>4}")
+    console.print(f"  Main-set basic lands     {len(breakdown.basics):>4}")
+
+    console.print("\n[yellow]Excluded:[/yellow]")
+    if breakdown.excluded_count:
+        for reason, count in breakdown.excluded_by_count():
+            console.print(f"  {reason:<48} {count:>4}")
+    else:
+        console.print("  [dim](none)[/dim]")
+
+    console.print(
+        f"\n[bold]Included count:[/bold] [green]{breakdown.included_count}[/green]   "
+        f"[bold]Excluded count:[/bold] [yellow]{breakdown.excluded_count}[/yellow]   "
+        f"[dim](of {breakdown.total} printings)[/dim]"
+    )
+    if not breakdown.included_count:
+        console.print(
+            "\n[yellow]Warning:[/yellow] no cards qualify for the full set — this set "
+            "may be unreleased or boosterless."
+        )
 
 
 @app.command()
