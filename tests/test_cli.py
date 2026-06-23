@@ -231,6 +231,59 @@ def test_add_multi_deduplicates_repeated_codes(mock_scryfall, db_path) -> None:
     assert "1 added." in result.output
 
 
+# -- refresh ---------------------------------------------------------------------
+
+
+def test_refresh_reupdates_owned_set(mock_scryfall, db_path) -> None:
+    # Add NEO, then refresh it: the cache is re-fetched and entries regenerated.
+    assert add_neo(db_path).exit_code == 0
+    result = runner.invoke(app, ["refresh", "NEO", "--db-path", str(db_path)])
+    assert result.exit_code == 0, result.output
+    assert "Refreshed Kamigawa: Neon Dynasty" in result.output
+    assert "cards cached" in result.output
+    # Same fixture -> same entry count, so it reports unchanged.
+    assert "unchanged" in result.output
+
+    # NEO is still owned with its 4 entries (regeneration didn't drop them).
+    listing = runner.invoke(app, ["list", "--db-path", str(db_path)])
+    assert "NEO" in listing.output and "4" in listing.output
+
+
+def test_refresh_unowned_set_exits_1(mock_scryfall, db_path) -> None:
+    # MOM is a known set but never added: refresh should refuse and point to add.
+    assert add_neo(db_path).exit_code == 0
+    result = runner.invoke(app, ["refresh", "MOM", "--db-path", str(db_path)])
+    assert result.exit_code == 1
+    assert "is not owned" in result.output
+
+
+def test_refresh_missing_db_exits_1(db_path) -> None:
+    result = runner.invoke(app, ["refresh", "NEO", "--db-path", str(db_path)])
+    assert result.exit_code == 1
+    assert "No collection database" in result.output
+
+
+def test_refresh_unknown_set_exits_1(mock_scryfall, db_path) -> None:
+    # Owned set whose code Scryfall no longer resolves: _load_set reports it.
+    runner.invoke(app, ["init", "--db-path", str(db_path)])
+    # Force an owned row for an unknown code, then try to refresh it.
+    conn = scryfall_owned_row(db_path, "zzz", "Gone Set")
+    conn.close()
+    result = runner.invoke(app, ["refresh", "ZZZ", "--db-path", str(db_path)])
+    assert result.exit_code == 1
+    assert "No set found" in result.output
+
+
+def scryfall_owned_row(db_path, code: str, name: str):
+    """Insert a bare owned_sets row directly, for guard-path tests."""
+    from mtgsets import db as _db
+
+    conn = _db.get_connection(db_path)
+    _db.insert_owned_set(conn, set_code=code, set_name=name, added_at="2026-01-01T00:00:00+00:00")
+    conn.commit()
+    return conn
+
+
 # -- search ----------------------------------------------------------------------
 
 
