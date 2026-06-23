@@ -68,6 +68,7 @@ def test_match_sets_handles_missing_fields() -> None:
 
 # -- get_set_cards pagination -----------------------------------------------------
 
+
 def test_get_set_cards_paginates_and_concatenates() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         assert request.url.path == "/cards/search"
@@ -111,6 +112,7 @@ def test_get_set_cards_returns_empty_on_404() -> None:
 
 # -- error mapping ----------------------------------------------------------------
 
+
 def test_http_error_status_maps_to_scryfall_error() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(500, json={"details": "server boom"})
@@ -146,6 +148,7 @@ def test_transport_failure_maps_to_scryfall_error() -> None:
 
 
 # -- get_set / get_sets happy paths ----------------------------------------------
+
 
 def test_get_set_returns_object() -> None:
     def handler(request: httpx.Request) -> httpx.Response:

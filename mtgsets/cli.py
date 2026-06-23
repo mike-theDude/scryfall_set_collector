@@ -31,9 +31,7 @@ _TODO = "[yellow]not yet implemented[/yellow]"
 
 @app.command()
 def init(
-    db_path: Path = typer.Option(
-        db.DB_PATH, "--db-path", help="Database file location."
-    ),
+    db_path: Path = typer.Option(db.DB_PATH, "--db-path", help="Database file location."),
 ) -> None:
     """Create the local SQLite database and schema."""
     created = db.init_db(db_path)
@@ -41,8 +39,7 @@ def init(
         console.print(f"[green]Initialized[/green] database at [bold]{db_path}[/bold]")
     else:
         console.print(
-            f"[yellow]Database already exists[/yellow] at [bold]{db_path}[/bold] "
-            "(schema ensured)"
+            f"[yellow]Database already exists[/yellow] at [bold]{db_path}[/bold] (schema ensured)"
         )
 
 
@@ -54,7 +51,7 @@ def search(query: str = typer.Argument(..., help="Set name or code substring."))
             all_sets = client.get_sets()
     except scryfall.ScryfallError as exc:
         console.print(f"[red]Scryfall request failed:[/red] {exc}")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from exc
 
     matches = scryfall.match_sets(all_sets, query)
     if not matches:
@@ -100,7 +97,7 @@ def _load_set(set_code: str) -> tuple[dict, list[dict]]:
             )
         else:
             console.print(f"[red]Scryfall request failed:[/red] {exc}")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from exc
     return set_obj, cards
 
 
@@ -233,8 +230,7 @@ def list_sets(
         )
     console.print(table)
     console.print(
-        f"[green]{len(rows)}[/green] set(s), "
-        f"[green]{total_entries}[/green] generated card entries."
+        f"[green]{len(rows)}[/green] set(s), [green]{total_entries}[/green] generated card entries."
     )
 
 
@@ -258,8 +254,7 @@ def remove(
     try:
         if not db.is_set_owned(conn, code):
             console.print(
-                f"[yellow]{display_code} is not owned.[/yellow] See "
-                f"[bold]mtgsets list[/bold]."
+                f"[yellow]{display_code} is not owned.[/yellow] See [bold]mtgsets list[/bold]."
             )
             raise typer.Exit(1)
 
@@ -296,9 +291,7 @@ def export_moxfield(
 ) -> None:
     """Export the collection as a Moxfield-importable CSV."""
     if not Path(db_path).exists():
-        console.print(
-            "No collection database yet. Run [bold]mtgsets add <set>[/bold] first."
-        )
+        console.print("No collection database yet. Run [bold]mtgsets add <set>[/bold] first.")
         raise typer.Exit(1)
 
     conn = db.get_connection(db_path)
@@ -313,8 +306,7 @@ def export_moxfield(
 
     written = export.write_moxfield_csv(entries, output)
     console.print(
-        f"[green]Exported[/green] [green]{written}[/green] cards to "
-        f"[bold]{output}[/bold]."
+        f"[green]Exported[/green] [green]{written}[/green] cards to [bold]{output}[/bold]."
     )
 
 

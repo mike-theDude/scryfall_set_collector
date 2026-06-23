@@ -11,8 +11,8 @@ ordering between branches.
 from __future__ import annotations
 
 import pytest
-
 from conftest import card_by_name
+
 from mtgsets import filters
 
 
@@ -119,7 +119,9 @@ ALT_TREATMENT_TRUE = [
 ]
 
 
-@pytest.mark.parametrize("label, overrides", ALT_TREATMENT_TRUE, ids=[c[0] for c in ALT_TREATMENT_TRUE])
+@pytest.mark.parametrize(
+    "label, overrides", ALT_TREATMENT_TRUE, ids=[c[0] for c in ALT_TREATMENT_TRUE]
+)
 def test_is_alternate_treatment_true(label, overrides) -> None:
     assert filters._is_alternate_treatment(base_card(**overrides)) is True
 
@@ -139,12 +141,15 @@ ALT_TREATMENT_FALSE = [
 ]
 
 
-@pytest.mark.parametrize("label, overrides", ALT_TREATMENT_FALSE, ids=[c[0] for c in ALT_TREATMENT_FALSE])
+@pytest.mark.parametrize(
+    "label, overrides", ALT_TREATMENT_FALSE, ids=[c[0] for c in ALT_TREATMENT_FALSE]
+)
 def test_is_alternate_treatment_false(label, overrides) -> None:
     assert filters._is_alternate_treatment(base_card(**overrides)) is False
 
 
 # -- priority ordering between branches ------------------------------------------
+
 
 def test_promo_reported_before_variant() -> None:
     # A borderless promo is reported as a promo, not a variant.
@@ -172,12 +177,14 @@ def test_non_english_reported_first() -> None:
 
 # -- is_main_set_card is exactly the negation ------------------------------------
 
+
 def test_is_main_set_card_is_negation(all_sample_cards) -> None:
     for card in all_sample_cards:
         assert filters.is_main_set_card(card) == (filters.exclusion_reason(card) is None)
 
 
 # -- aggregate split over the NEO fixture subset ---------------------------------
+
 
 def test_neo_fixture_split(neo_cards) -> None:
     included = [c for c in neo_cards if filters.is_main_set_card(c)]

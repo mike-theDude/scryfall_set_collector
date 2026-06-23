@@ -20,6 +20,7 @@ dependencies = [
 # HTTP mocking uses stdlib httpx.MockTransport, so no extra dependency is needed.
 dev = [
     "pytest>=8.0",
+    "ruff>=0.6",
 ]
 
 [project.scripts]
@@ -31,3 +32,16 @@ packages = ["mtgsets"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra"
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+
+[tool.ruff.lint]
+# pycodestyle errors/warnings, pyflakes, import sorting, pyupgrade, bugbear.
+select = ["E", "W", "F", "I", "UP", "B"]
+
+[tool.ruff.lint.flake8-bugbear]
+# typer.Option/Argument as parameter defaults is the standard Typer idiom, not
+# the mutable-default bug B008 guards against.
+extend-immutable-calls = ["typer.Option", "typer.Argument"]

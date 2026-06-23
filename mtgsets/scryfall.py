@@ -11,7 +11,8 @@ Scryfall request etiquette: identify via User-Agent/Accept headers and keep
 from __future__ import annotations
 
 import time
-from typing import Any, Iterator
+from collections.abc import Iterator
+from typing import Any
 
 import httpx
 
@@ -21,8 +22,7 @@ SCRYFALL_API_BASE = "https://api.scryfall.com"
 
 _HEADERS = {
     "User-Agent": (
-        f"mtgsets/{__version__} "
-        "(https://github.com/mike-theDude/scryfall_set_collector)"
+        f"mtgsets/{__version__} (https://github.com/mike-theDude/scryfall_set_collector)"
     ),
     "Accept": "application/json",
 }
@@ -54,7 +54,7 @@ class ScryfallClient:
             base_url=base_url, headers=_HEADERS, timeout=timeout, transport=transport
         )
 
-    def __enter__(self) -> "ScryfallClient":
+    def __enter__(self) -> ScryfallClient:
         return self
 
     def __exit__(self, *exc: object) -> None:
@@ -81,9 +81,7 @@ class ScryfallClient:
             )
         return resp.json()
 
-    def _paginate(
-        self, url: str, params: dict[str, Any] | None = None
-    ) -> Iterator[dict[str, Any]]:
+    def _paginate(self, url: str, params: dict[str, Any] | None = None) -> Iterator[dict[str, Any]]:
         """Yield every item across a paginated Scryfall list response."""
         page = self._get(url, params=params)
         while True:
@@ -119,9 +117,7 @@ class ScryfallClient:
             raise
 
 
-def match_sets(
-    sets: list[dict[str, Any]], query: str
-) -> list[dict[str, Any]]:
+def match_sets(sets: list[dict[str, Any]], query: str) -> list[dict[str, Any]]:
     """Filter sets whose code or name contains ``query`` (case-insensitive).
 
     Scryfall has no server-side set search, so the caller fetches all sets via
@@ -132,8 +128,7 @@ def match_sets(
     matches = [
         s
         for s in sets
-        if needle in (s.get("code") or "").lower()
-        or needle in (s.get("name") or "").lower()
+        if needle in (s.get("code") or "").lower() or needle in (s.get("name") or "").lower()
     ]
     matches.sort(key=lambda s: s.get("released_at") or "", reverse=True)
     return matches

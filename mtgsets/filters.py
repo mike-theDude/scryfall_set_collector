@@ -75,11 +75,7 @@ def exclusion_reason(card: dict[str, Any]) -> str | None:
     bucket for `preview` (e.g. a borderless promo is reported as a promo, a
     boosterfun showcase as a variant rather than merely "not in set").
     """
-    if (
-        card.get("lang") != "en"
-        or card.get("digital")
-        or "paper" not in (card.get("games") or ())
-    ):
+    if card.get("lang") != "en" or card.get("digital") or "paper" not in (card.get("games") or ()):
         return REASON_NON_ENGLISH
     if card.get("layout") in EXCLUDED_LAYOUTS:
         return REASON_NON_PLAYABLE

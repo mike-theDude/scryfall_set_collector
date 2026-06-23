@@ -7,8 +7,9 @@ Example row: ``1,0,"Boseiju, Who Endures",NEO,Near Mint,English,,Full Set: NEO,2
 from __future__ import annotations
 
 import csv
+from collections.abc import Iterable, Mapping
 from pathlib import Path
-from typing import Any, Iterable, Mapping
+from typing import Any
 
 #: Moxfield import column order (see docs/DESIGN.md).
 MOXFIELD_COLUMNS = [
