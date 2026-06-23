@@ -1,7 +1,9 @@
 # CLAUDE.md
 
 Guidance for working in this repo. Read alongside [README.md](README.md) (user-facing
-usage) and [docs/DESIGN.md](docs/DESIGN.md) (the canonical schema / export / filter spec).
+usage), [docs/DESIGN.md](docs/DESIGN.md) (the canonical schema / export / filter spec),
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) (layering and module responsibilities), and
+[docs/STYLE.md](docs/STYLE.md) (coding conventions).
 
 ## Follow the design doc (enforced)
 
