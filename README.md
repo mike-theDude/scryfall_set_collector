@@ -126,15 +126,22 @@ Then import `exports/moxfield.csv` into Moxfield via your collection's
 | `mtgsets add <set_code>` | Mark a set fully owned and generate its card entries. |
 | `mtgsets add-multi <set_code>...` | Add several sets in one run, best-effort per set. |
 | `mtgsets list` | List owned sets and their generated entry counts. |
+| `mtgsets stats` | Show collection stats — sets owned vs. the total number of sets. |
 | `mtgsets remove <set_code>` | Remove a set and **only** its generated entries. |
 | `mtgsets export moxfield` | Export the collection as a Moxfield CSV. |
 
 Useful options:
 
 - `--db-path PATH` — use an alternate database file (all DB commands).
+- `mtgsets stats --no-remote` — skip Scryfall and omit the total-sets comparison.
 - `mtgsets remove <set> --yes` / `-y` — skip the confirmation prompt.
 - `mtgsets export moxfield --output PATH` / `-o PATH` — write the CSV elsewhere
   (default `exports/moxfield.csv`).
+
+`stats` compares owned sets against the count of **core/expansion** releases on
+Scryfall (the numbered Standard sets — Commander decks, Masters reprints, tokens,
+promos, and digital-only sets are not part of that denominator). Sets you own that
+fall outside core/expansion are still counted and listed separately.
 
 ### Example: preview
 
@@ -182,6 +189,7 @@ scryfall_set_collector/
     scryfall.py     # Scryfall API client
     filters.py      # Inclusion/exclusion rules (single source of truth)
     collection.py   # Set -> card-level entry generation
+    stats.py        # Collection statistics (sets owned vs. total)
     export.py       # Moxfield CSV export
   data/             # local database (gitignored)
   exports/          # generated CSVs (gitignored)
