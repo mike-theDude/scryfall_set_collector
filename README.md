@@ -1,5 +1,7 @@
 # scryfall_set_collector
 
+[![CI](https://github.com/mike-theDude/scryfall_set_collector/actions/workflows/ci.yml/badge.svg)](https://github.com/mike-theDude/scryfall_set_collector/actions/workflows/ci.yml)
+
 `mtgsets` — a command-line app for managing a Magic: The Gathering collection by
 **full set**.
 
