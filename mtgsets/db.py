@@ -124,3 +124,61 @@ def upsert_cards(conn: sqlite3.Connection, raw_cards: Iterable[dict[str, Any]]) 
     )
     conn.commit()
     return len(rows)
+
+
+def is_set_owned(conn: sqlite3.Connection, set_code: str) -> bool:
+    """Return True if a row for ``set_code`` exists in owned_sets."""
+    row = conn.execute(
+        "SELECT 1 FROM owned_sets WHERE set_code = ?", (set_code.lower(),)
+    ).fetchone()
+    return row is not None
+
+
+def insert_owned_set(
+    conn: sqlite3.Connection,
+    *,
+    set_code: str,
+    set_name: str,
+    added_at: str,
+    quantity: int = 1,
+    language: str = "English",
+    condition: str = "Near Mint",
+    foil: int = 0,
+    profile: str = "main_set_plus_basics",
+) -> None:
+    """Insert one owned_sets row. Does not commit (caller owns the transaction)."""
+    conn.execute(
+        "INSERT INTO owned_sets "
+        "(set_code, set_name, quantity, language, condition, foil, profile, added_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        (
+            set_code.lower(),
+            set_name,
+            quantity,
+            language,
+            condition,
+            foil,
+            profile,
+            added_at,
+        ),
+    )
+
+
+def insert_collection_entries(
+    conn: sqlite3.Connection, rows: Iterable[tuple[Any, ...]]
+) -> int:
+    """Insert collection_entries rows. Does not commit (caller owns the transaction).
+
+    Each row is column-ordered: (scryfall_id, set_code, quantity, condition,
+    language, foil, source_type, source_set_code). The referenced cards must
+    already exist (FK), so cache them with upsert_cards first.
+    """
+    rows = list(rows)
+    conn.executemany(
+        "INSERT INTO collection_entries "
+        "(scryfall_id, set_code, quantity, condition, language, foil, "
+        "source_type, source_set_code) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        rows,
+    )
+    return len(rows)
