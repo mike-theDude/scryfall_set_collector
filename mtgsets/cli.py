@@ -16,7 +16,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from . import collection, db, scryfall
+from . import collection, db, export, scryfall
 
 app = typer.Typer(
     name="mtgsets",
@@ -288,9 +288,34 @@ app.add_typer(export_app, name="export")
 
 
 @export_app.command("moxfield")
-def export_moxfield() -> None:
-    """Export a Moxfield-compatible CSV (issue #10)."""
-    console.print(f"export moxfield: {_TODO}")
+def export_moxfield(
+    db_path: Path = typer.Option(db.DB_PATH, "--db-path", help="Database file location."),
+    output: Path = typer.Option(
+        Path("exports") / "moxfield.csv", "--output", "-o", help="CSV output path."
+    ),
+) -> None:
+    """Export the collection as a Moxfield-importable CSV."""
+    if not Path(db_path).exists():
+        console.print(
+            "No collection database yet. Run [bold]mtgsets add <set>[/bold] first."
+        )
+        raise typer.Exit(1)
+
+    conn = db.get_connection(db_path)
+    try:
+        entries = db.get_export_entries(conn)
+    finally:
+        conn.close()
+
+    if not entries:
+        console.print("Nothing to export — the collection is empty.")
+        raise typer.Exit(1)
+
+    written = export.write_moxfield_csv(entries, output)
+    console.print(
+        f"[green]Exported[/green] [green]{written}[/green] cards to "
+        f"[bold]{output}[/bold]."
+    )
 
 
 def main() -> None:
