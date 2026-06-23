@@ -13,8 +13,9 @@ from pathlib import Path
 
 import typer
 from rich.console import Console
+from rich.table import Table
 
-from . import db
+from . import db, scryfall
 
 app = typer.Typer(
     name="mtgsets",
@@ -45,9 +46,42 @@ def init(
 
 
 @app.command()
-def search(query: str = typer.Argument(..., help="Set search query.")) -> None:
-    """Search Scryfall for sets (issue #5)."""
-    console.print(f"search {query!r}: {_TODO}")
+def search(query: str = typer.Argument(..., help="Set name or code substring.")) -> None:
+    """Search Scryfall for sets by name or code."""
+    try:
+        with scryfall.ScryfallClient() as client:
+            all_sets = client.get_sets()
+    except scryfall.ScryfallError as exc:
+        console.print(f"[red]Scryfall request failed:[/red] {exc}")
+        raise typer.Exit(1)
+
+    matches = scryfall.match_sets(all_sets, query)
+    if not matches:
+        console.print(f"No sets match [bold]{query!r}[/bold].")
+        raise typer.Exit()
+
+    table = Table(title=f"Sets matching {query!r}")
+    table.add_column("Code", style="bold cyan")
+    table.add_column("Name")
+    table.add_column("Type", style="dim")
+    table.add_column("Released")
+    table.add_column("Cards", justify="right")
+    for s in matches:
+        digital = s.get("digital")
+        style = "dim" if digital else None
+        name = s.get("name", "")
+        if digital:
+            name += " [dim](digital)[/dim]"
+        table.add_row(
+            (s.get("code") or "").upper(),
+            name,
+            (s.get("set_type") or "").replace("_", " "),
+            s.get("released_at") or "—",
+            str(s.get("card_count", 0)),
+            style=style,
+        )
+    console.print(table)
+    console.print(f"[green]{len(matches)}[/green] set(s) found.")
 
 
 @app.command()
