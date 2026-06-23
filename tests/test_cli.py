@@ -44,6 +44,8 @@ def mock_scryfall(monkeypatch, neo_cards):
 
     sets_by_code = {"neo": NEO_SET, "mom": MOM_SET}
 
+    cards_by_number = {str(c.get("collector_number")): c for c in neo_cards}
+
     def handler(request: httpx.Request) -> httpx.Response:
         path = request.url.path
         if path.startswith("/sets/"):
@@ -56,6 +58,12 @@ def mock_scryfall(monkeypatch, neo_cards):
             if q in ("set:neo", "set:mom"):
                 return httpx.Response(200, json={"data": neo_cards, "has_more": False})
             return httpx.Response(404, json={"details": "no cards found"})
+        if path.startswith("/cards/"):
+            # /cards/<set>/<number> — one exact printing (add-card).
+            parts = path.removeprefix("/cards/").split("/")
+            if len(parts) == 2 and parts[0] in sets_by_code and parts[1] in cards_by_number:
+                return httpx.Response(200, json=cards_by_number[parts[1]])
+            return httpx.Response(404, json={"details": "card not found"})
         if path == "/sets":
             return httpx.Response(
                 200, json={"data": list(sets_by_code.values()), "has_more": False}
@@ -282,6 +290,91 @@ def scryfall_owned_row(db_path, code: str, name: str):
     _db.insert_owned_set(conn, set_code=code, set_name=name, added_at="2026-01-01T00:00:00+00:00")
     conn.commit()
     return conn
+
+
+# -- add-card / remove-card (manual singles) -------------------------------------
+
+
+def export_lines(db_path, tmp_path) -> list[str]:
+    """Export the collection and return the CSV's data rows (no header)."""
+    csv_path = tmp_path / "out.csv"
+    result = runner.invoke(
+        app, ["export", "moxfield", "--db-path", str(db_path), "-o", str(csv_path)]
+    )
+    assert result.exit_code == 0, result.output
+    return csv_path.read_text(encoding="utf-8").splitlines()[1:]
+
+
+def test_add_card_creates_manual_single(mock_scryfall, db_path, tmp_path) -> None:
+    # Collector #2 in the NEO fixture is "Ao, the Dawn Sky".
+    result = runner.invoke(
+        app, ["add-card", "NEO", "2", "-q", "2", "--foil", "--db-path", str(db_path)]
+    )
+    assert result.exit_code == 0, result.output
+    assert "Added" in result.output and "Ao, the Dawn Sky" in result.output
+    assert "quantity now 2" in result.output
+
+    # Exported as a manual single: foil, count 2, and NO "Full Set" tag.
+    rows = export_lines(db_path, tmp_path)
+    assert len(rows) == 1
+    assert "Ao, the Dawn Sky" in rows[0]
+    assert "foil" in rows[0]
+    assert rows[0].startswith("2,")  # Count column
+    assert "Full Set" not in rows[0]
+
+
+def test_add_card_stacks_quantity(mock_scryfall, db_path) -> None:
+    assert runner.invoke(app, ["add-card", "NEO", "2", "--db-path", str(db_path)]).exit_code == 0
+    result = runner.invoke(app, ["add-card", "NEO", "2", "--db-path", str(db_path)])
+    assert result.exit_code == 0, result.output
+    assert "Updated" in result.output and "quantity now 2" in result.output
+
+
+def test_add_card_coexists_with_full_set(mock_scryfall, db_path, tmp_path) -> None:
+    # NEO full set includes card #2; adding it again as a manual single is allowed
+    # and flagged, and both rows survive.
+    assert add_neo(db_path).exit_code == 0
+    result = runner.invoke(app, ["add-card", "NEO", "2", "--db-path", str(db_path)])
+    assert result.exit_code == 0, result.output
+    assert "also own this card via a full set" in result.output
+
+    # 4 generated full-set rows + 1 manual = 5 exported rows.
+    assert len(export_lines(db_path, tmp_path)) == 5
+
+
+def test_add_card_unknown_exits_1(mock_scryfall, db_path) -> None:
+    result = runner.invoke(app, ["add-card", "NEO", "9999", "--db-path", str(db_path)])
+    assert result.exit_code == 1
+    assert "No card found" in result.output
+
+
+def test_remove_card_deletes_manual_single(mock_scryfall, db_path) -> None:
+    assert runner.invoke(app, ["add-card", "NEO", "2", "--db-path", str(db_path)]).exit_code == 0
+    result = runner.invoke(app, ["remove-card", "NEO", "2", "--db-path", str(db_path)])
+    assert result.exit_code == 0, result.output
+    assert "Removed" in result.output
+    # Removing again finds nothing.
+    again = runner.invoke(app, ["remove-card", "NEO", "2", "--db-path", str(db_path)])
+    assert again.exit_code == 1
+    assert "No manual single found" in again.output
+
+
+def test_remove_card_leaves_full_set_untouched(mock_scryfall, db_path, tmp_path) -> None:
+    # Manual single + full set both present; remove-card drops only the manual one.
+    assert add_neo(db_path).exit_code == 0
+    assert runner.invoke(app, ["add-card", "NEO", "2", "--db-path", str(db_path)]).exit_code == 0
+    assert len(export_lines(db_path, tmp_path)) == 5  # 4 full_set + 1 manual
+
+    result = runner.invoke(app, ["remove-card", "NEO", "2", "--db-path", str(db_path)])
+    assert result.exit_code == 0, result.output
+    # Back to the 4 generated full-set rows — the set is intact.
+    assert len(export_lines(db_path, tmp_path)) == 4
+
+
+def test_remove_card_missing_db_exits_1(db_path) -> None:
+    result = runner.invoke(app, ["remove-card", "NEO", "2", "--db-path", str(db_path)])
+    assert result.exit_code == 1
+    assert "nothing to remove" in result.output
 
 
 # -- show ------------------------------------------------------------------------

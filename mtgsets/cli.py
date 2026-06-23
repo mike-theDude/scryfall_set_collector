@@ -285,6 +285,124 @@ def add_multi(
         raise typer.Exit(1)
 
 
+@app.command(name="add-card")
+def add_card(
+    set_code: str = typer.Argument(..., help="Set code, e.g. NEO."),
+    collector_number: str = typer.Argument(..., help="Collector number within the set, e.g. 266."),
+    db_path: Path = typer.Option(db.DB_PATH, "--db-path", help="Database file location."),
+    quantity: int = typer.Option(1, "--quantity", "-q", min=1, help="How many copies to add."),
+    foil: bool = typer.Option(False, "--foil/--nonfoil", help="Track the copies as foil."),
+    condition: str = typer.Option("Near Mint", "--condition", help="Card condition."),
+    language: str = typer.Option("English", "--language", help="Card language."),
+) -> None:
+    """Manually add an individual card as a single (source_type=manual).
+
+    Identifies the exact printing by set code + collector number. Manual singles
+    coexist with full-set entries — adding a card you already own via a full set is
+    allowed and never alters the generated rows. Re-adding the same printing/finish
+    stacks onto the existing manual quantity instead of duplicating it.
+    """
+    display_code = set_code.strip().upper()
+
+    # -- fetch the exact printing (network boundary) ------------------------
+    try:
+        with scryfall.ScryfallClient() as client:
+            card = client.get_card(set_code.strip().lower(), collector_number.strip())
+    except scryfall.ScryfallError as exc:
+        if exc.status_code == 404:
+            console.print(
+                f"[red]No card found[/red] at [bold]{display_code} {collector_number}[/bold]. "
+                "Check the set code and collector number."
+            )
+        else:
+            console.print(f"[red]Scryfall request failed:[/red] {exc}")
+        raise typer.Exit(1) from exc
+
+    card_set = (card.get("set") or set_code).lower()
+    name = card.get("name", "?")
+
+    db.init_db(db_path)
+    conn = db.get_connection(db_path)
+    try:
+        also_full_set = (
+            conn.execute(
+                "SELECT 1 FROM collection_entries "
+                "WHERE source_type = 'full_set' AND scryfall_id = ? LIMIT 1",
+                (card["id"],),
+            ).fetchone()
+            is not None
+        )
+        try:
+            db.upsert_cards(conn, [card])
+            action, new_qty = db.add_manual_entry(
+                conn,
+                scryfall_id=card["id"],
+                set_code=card_set,
+                quantity=quantity,
+                condition=condition,
+                language=language,
+                foil=int(foil),
+            )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+    finally:
+        conn.close()
+
+    finish = "foil" if foil else "nonfoil"
+    verb = "Added" if action == "added" else "Updated"
+    console.print(
+        f"[green]{verb}[/green] manual single: [bold]{name}[/bold] "
+        f"([cyan]{card_set.upper()}[/cyan] {card.get('collector_number')}, {finish}) — "
+        f"quantity now [green]{new_qty}[/green]."
+    )
+    if also_full_set:
+        console.print(
+            "  [dim]Note: you also own this card via a full set; the manual single is "
+            "tracked separately.[/dim]"
+        )
+
+
+@app.command(name="remove-card")
+def remove_card(
+    set_code: str = typer.Argument(..., help="Set code, e.g. NEO."),
+    collector_number: str = typer.Argument(..., help="Collector number within the set, e.g. 266."),
+    db_path: Path = typer.Option(db.DB_PATH, "--db-path", help="Database file location."),
+) -> None:
+    """Remove manually added single(s) for a printing (source_type=manual only).
+
+    Identifies the printing by set code + collector number and deletes every manual
+    copy of it. Full-set entries and overrides for the same card are never touched,
+    so removing a manual single never disturbs a set you own.
+    """
+    if not Path(db_path).exists():
+        console.print("No collection database yet — nothing to remove.")
+        raise typer.Exit(1)
+
+    code = set_code.strip().lower()
+    display_code = code.upper()
+    number = collector_number.strip()
+    conn = db.get_connection(db_path)
+    try:
+        rows_deleted, quantity_removed = db.remove_manual_card(conn, code, number)
+    finally:
+        conn.close()
+
+    if not rows_deleted:
+        console.print(
+            f"[yellow]No manual single found[/yellow] for "
+            f"[bold]{display_code} {number}[/bold]. "
+            "(Full-set cards are removed with [bold]mtgsets remove[/bold].)"
+        )
+        raise typer.Exit(1)
+
+    console.print(
+        f"[green]Removed[/green] [green]{quantity_removed}[/green] manual cop(y/ies) of "
+        f"[cyan]{display_code}[/cyan] {number}."
+    )
+
+
 @app.command()
 def refresh(
     set_code: str = typer.Argument(..., help="Set code, e.g. NEO."),

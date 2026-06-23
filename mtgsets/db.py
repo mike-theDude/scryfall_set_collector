@@ -287,6 +287,76 @@ def remove_owned_set(conn: sqlite3.Connection, set_code: str) -> tuple[int, bool
     return entries_deleted, set_existed
 
 
+def add_manual_entry(
+    conn: sqlite3.Connection,
+    *,
+    scryfall_id: str,
+    set_code: str,
+    quantity: int = 1,
+    condition: str = "Near Mint",
+    language: str = "English",
+    foil: int = 0,
+) -> tuple[str, int]:
+    """Add a manual single, or bump an existing identical one's quantity.
+
+    Manual entries (source_type='manual', source_set_code=NULL) coexist with any
+    full_set entry for the same card — they are never merged with generated rows.
+    Two manual adds of the same printing **and** finish/condition/language stack
+    into one row's quantity rather than creating duplicates. The referenced card
+    must already be cached (FK), so call :func:`upsert_cards` first. Does not commit.
+
+    Returns ``(action, new_quantity)`` where action is ``"added"`` or ``"increased"``.
+    """
+    existing = conn.execute(
+        "SELECT id, quantity FROM collection_entries "
+        "WHERE source_type = 'manual' AND scryfall_id = ? AND foil = ? "
+        "AND condition = ? AND language = ?",
+        (scryfall_id, foil, condition, language),
+    ).fetchone()
+    if existing is not None:
+        new_qty = existing["quantity"] + quantity
+        conn.execute(
+            "UPDATE collection_entries SET quantity = ? WHERE id = ?",
+            (new_qty, existing["id"]),
+        )
+        return "increased", new_qty
+    conn.execute(
+        "INSERT INTO collection_entries "
+        "(scryfall_id, set_code, quantity, condition, language, foil, "
+        "source_type, source_set_code) "
+        "VALUES (?, ?, ?, ?, ?, ?, 'manual', NULL)",
+        (scryfall_id, set_code.lower(), quantity, condition, language, foil),
+    )
+    return "added", quantity
+
+
+def remove_manual_card(
+    conn: sqlite3.Connection, set_code: str, collector_number: str
+) -> tuple[int, int]:
+    """Delete the manual single(s) for a printing, identified by set + number.
+
+    Matches only source_type='manual' rows, so a card's full_set or override
+    entries are never touched (the coexistence invariant). Removes every manual
+    holding of that printing (any finish/condition). Commits.
+
+    Returns ``(rows_deleted, quantity_removed)``; ``(0, 0)`` if none matched.
+    """
+    rows = conn.execute(
+        "SELECT e.id AS id, e.quantity AS quantity "
+        "FROM collection_entries e JOIN cards c ON c.scryfall_id = e.scryfall_id "
+        "WHERE e.source_type = 'manual' AND c.set_code = ? AND c.collector_number = ?",
+        (set_code.lower(), str(collector_number)),
+    ).fetchall()
+    if not rows:
+        return 0, 0
+    ids = [r["id"] for r in rows]
+    quantity_removed = sum(r["quantity"] for r in rows)
+    placeholders = ",".join("?" * len(ids))
+    conn.execute(f"DELETE FROM collection_entries WHERE id IN ({placeholders})", ids)
+    conn.commit()
+    return len(ids), quantity_removed
+
+
 def insert_collection_entries(conn: sqlite3.Connection, rows: Iterable[tuple[Any, ...]]) -> int:
     """Insert collection_entries rows. Does not commit (caller owns the transaction).
 

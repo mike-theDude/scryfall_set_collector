@@ -228,6 +228,55 @@ def test_list_owned_sets_zero_entries(conn) -> None:
     assert rows[0]["entry_count"] == 0
 
 
+# -- manual singles: add_manual_entry / remove_manual_card ------------------------
+
+
+def test_add_manual_entry_inserts_then_stacks(conn) -> None:
+    db.upsert_cards(conn, [make_card("neo-1", set_code="neo", collector_number="2")])
+    conn.commit()
+
+    action, qty = db.add_manual_entry(conn, scryfall_id="neo-1", set_code="neo", quantity=1)
+    conn.commit()
+    assert (action, qty) == ("added", 1)
+
+    # Same printing + finish/condition/language stacks into the one row.
+    action, qty = db.add_manual_entry(conn, scryfall_id="neo-1", set_code="neo", quantity=2)
+    conn.commit()
+    assert (action, qty) == ("increased", 3)
+    assert entry_signatures(conn) == {("neo-1", "manual", None)}  # still a single row
+
+
+def test_add_manual_entry_foil_is_a_distinct_row(conn) -> None:
+    db.upsert_cards(conn, [make_card("neo-1", set_code="neo", collector_number="2")])
+    conn.commit()
+    db.add_manual_entry(conn, scryfall_id="neo-1", set_code="neo", foil=0)
+    db.add_manual_entry(conn, scryfall_id="neo-1", set_code="neo", foil=1)
+    conn.commit()
+    # Foil and nonfoil are different collectibles -> two rows, not a stack.
+    rows = conn.execute(
+        "SELECT foil, quantity FROM collection_entries WHERE source_type = 'manual'"
+    ).fetchall()
+    assert {(r["foil"], r["quantity"]) for r in rows} == {(0, 1), (1, 1)}
+
+
+def test_remove_manual_card_only_deletes_manual_rows(conn) -> None:
+    # A card present as BOTH a full_set entry and a manual single (coexistence).
+    db.upsert_cards(conn, [make_card("neo-2", set_code="neo", collector_number="2")])
+    conn.commit()
+    add_entry(conn, "neo-2", "neo", "full_set", "neo", collector_number="2")
+    db.add_manual_entry(conn, scryfall_id="neo-2", set_code="neo", quantity=3)
+    conn.commit()
+
+    rows_deleted, qty_removed = db.remove_manual_card(conn, "NEO", "2")  # case-insensitive
+    assert (rows_deleted, qty_removed) == (1, 3)
+    # The full_set entry for the same printing survives.
+    assert entry_signatures(conn) == {("neo-2", "full_set", "neo")}
+
+
+def test_remove_manual_card_no_match_is_zero(conn) -> None:
+    assert db.remove_manual_card(conn, "neo", "999") == (0, 0)
+
+
 # -- get_owned_cards scoping / get_owned_set --------------------------------------
 
 
