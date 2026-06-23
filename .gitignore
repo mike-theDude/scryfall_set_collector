@@ -1,6 +1,25 @@
 # Claude Code local settings
 .claude/settings.local.json
 
+# Local app data and generated output
+data/collection.db
+data/*.db
+exports/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
 # OS / editor cruft
 .DS_Store
 *.swp
