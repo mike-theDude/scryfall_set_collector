@@ -201,6 +201,23 @@ def get_export_entries(conn: sqlite3.Connection) -> list[sqlite3.Row]:
     ).fetchall()
 
 
+def get_owned_cards(conn: sqlite3.Connection) -> list[tuple[int, dict[str, Any]]]:
+    """Return ``(quantity, full Scryfall card object)`` for every collection entry.
+
+    Joins collection_entries to the cached ``cards`` table and parses each stored
+    ``full_json`` blob, so the stats layer can aggregate by rarity/color/type/mana
+    value/price without re-hitting Scryfall. The raw object carries everything those
+    breakdowns need (``rarity``, ``color_identity``, ``type_line``, ``cmc``,
+    ``prices``, ``set``, ``id``).
+    """
+    rows = conn.execute(
+        "SELECT e.quantity AS quantity, c.full_json AS full_json "
+        "FROM collection_entries e "
+        "JOIN cards c ON c.scryfall_id = e.scryfall_id"
+    ).fetchall()
+    return [(row["quantity"], json.loads(row["full_json"])) for row in rows]
+
+
 def count_full_set_entries(conn: sqlite3.Connection, set_code: str) -> int:
     """Return how many generated full-set entries exist for ``set_code``."""
     return conn.execute(

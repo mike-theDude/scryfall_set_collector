@@ -333,14 +333,100 @@ def list_sets(
     )
 
 
+def _print_breakdown(title: str, pairs: list[tuple[str, int]]) -> None:
+    """Render a ``[(label, count), ...]`` composition section."""
+    console.print(f"\n[bold]{title}[/bold]")
+    if not pairs:
+        console.print("  [dim](none)[/dim]")
+        return
+    width = max(len(label) for label, _ in pairs)
+    for label, count in pairs:
+        console.print(f"  {label:<{width}}  [green]{count}[/green]")
+
+
+def _fetch_live_prices(
+    client: scryfall.ScryfallClient, set_codes: set[str]
+) -> dict[str, dict]:
+    """Map ``scryfall_id -> current card object`` for the given owned sets."""
+    fresh: dict[str, dict] = {}
+    for code in sorted(set_codes):
+        for card in client.get_set_cards(code):
+            fresh[card["id"]] = card
+    return fresh
+
+
+def _print_progress(p: stats.ProgressStats) -> None:
+    console.print("\n[bold]Progress[/bold]")
+    if p.newest_owned and p.newest_owned.released_at:
+        console.print(
+            f"  Newest owned   [cyan]{p.newest_owned.code.upper()}[/cyan] "
+            f"({p.newest_owned.released_at}) — {p.newest_owned.name}"
+        )
+    if p.oldest_owned and p.oldest_owned.released_at:
+        console.print(
+            f"  Oldest owned   [cyan]{p.oldest_owned.code.upper()}[/cyan] "
+            f"({p.oldest_owned.released_at}) — {p.oldest_owned.name}"
+        )
+    if p.sets_behind == 0:
+        console.print("  [green]Up to date[/green] with the latest core/expansion release.")
+    elif p.sets_behind is not None:
+        latest = f" (latest {p.latest_release.code.upper()})" if p.latest_release else ""
+        console.print(
+            f"  Sets behind    [yellow]{p.sets_behind}[/yellow] "
+            f"core/expansion release(s){latest}"
+        )
+    console.print(
+        f"  Added         {p.added_last_30} in 30d · {p.added_last_90} in 90d · "
+        f"{p.added_last_365} in 365d"
+    )
+    if p.coverage_by_year:
+        years = "  ".join(f"{year}:{count}" for year, count in p.coverage_by_year)
+        console.print(f"  By year       {years}")
+
+
+def _print_value(v: stats.ValueStats) -> None:
+    console.print(
+        f"\n[bold]Estimated value[/bold]  [green]${v.total_usd:,.2f}[/green]  "
+        "[dim](live USD prices)[/dim]"
+    )
+    if v.unpriced_count:
+        console.print(f"  [dim]{v.unpriced_count} card(s) had no USD price[/dim]")
+    if v.top_cards:
+        console.print("  Top cards:")
+        for name, set_code, value in v.top_cards:
+            console.print(f"    [green]${value:>8,.2f}[/green]  {name} ([cyan]{set_code}[/cyan])")
+    if v.top_sets:
+        console.print("  Top sets:")
+        for set_code, value in v.top_sets:
+            console.print(f"    [green]${value:>8,.2f}[/green]  [cyan]{set_code}[/cyan]")
+
+
 @app.command(name="stats")
 def stats_command(
     db_path: Path = typer.Option(db.DB_PATH, "--db-path", help="Database file location."),
     no_remote: bool = typer.Option(
-        False, "--no-remote", help="Skip Scryfall; omit the total-sets comparison."
+        False, "--no-remote", help="Skip Scryfall; omit the total-sets/progress/value sections."
     ),
+    rarity: bool = typer.Option(False, "--rarity", help="Break down owned cards by rarity."),
+    colors: bool = typer.Option(False, "--colors", help="Break down owned cards by color."),
+    types: bool = typer.Option(False, "--types", help="Break down owned cards by card type."),
+    curve: bool = typer.Option(False, "--curve", help="Show the owned mana-value curve."),
+    progress: bool = typer.Option(
+        False, "--progress", help="Show release-timeline progress (needs Scryfall)."
+    ),
+    value: bool = typer.Option(
+        False, "--value", help="Estimate collection value from live Scryfall prices."
+    ),
+    show_all: bool = typer.Option(False, "--all", help="Show every breakdown section."),
 ) -> None:
-    """Show collection statistics — sets owned vs. the total number of sets."""
+    """Show collection statistics — sets owned vs. total, with optional breakdowns.
+
+    The default output is compact; add flags (or ``--all``) for composition, progress,
+    and value breakdowns.
+    """
+    if show_all:
+        rarity = colors = types = curve = progress = value = True
+
     if not Path(db_path).exists():
         console.print(
             "No collection database yet. Run [bold]mtgsets init[/bold] and "
@@ -348,28 +434,46 @@ def stats_command(
         )
         raise typer.Exit(1)
 
+    need_cards = rarity or colors or types or curve or value
     conn = db.get_connection(db_path)
     try:
         rows = db.list_owned_sets(conn)
+        owned_cards = db.get_owned_cards(conn) if need_cards else []
     finally:
         conn.close()
 
     owned_codes = [r["set_code"] for r in rows]
+    owned_added = [(r["set_code"], r["added_at"]) for r in rows]
     card_entries = sum(r["entry_count"] for r in rows)
 
-    # The total-sets denominator needs the live Scryfall set list; degrade gracefully
-    # (still report owned totals) when it's unavailable or explicitly skipped.
-    release_codes: list[str] | None = None
-    if not no_remote:
+    # Decide which network calls are needed, then make them in one client session.
+    # --no-remote is authoritative: it suppresses every networked section.
+    want_sets = not no_remote
+    want_prices = value and not no_remote and bool(owned_cards)
+    all_sets: list[dict] | None = None
+    live_prices: dict[str, dict] | None = None
+    if want_sets or want_prices:
         try:
             with scryfall.ScryfallClient() as client:
-                release_codes = [s["code"] for s in scryfall.release_sets(client.get_sets())]
+                if want_sets:
+                    all_sets = client.get_sets()
+                if want_prices:
+                    console.print("[dim]Fetching current prices…[/dim]")
+                    live_prices = _fetch_live_prices(
+                        client, {(c.get("set") or "") for _, c in owned_cards}
+                    )
         except scryfall.ScryfallError as exc:
             console.print(
-                f"[yellow]Note:[/yellow] could not reach Scryfall for the total set "
-                f"count ({exc}); showing owned totals only."
+                f"[yellow]Note:[/yellow] could not reach Scryfall ({exc}); "
+                "showing local stats only."
             )
 
+    # Release denominator only when not explicitly skipped (and the fetch succeeded).
+    release_codes = (
+        [s["code"] for s in scryfall.release_sets(all_sets)]
+        if all_sets is not None and not no_remote
+        else None
+    )
     s = stats.build_stats(owned_codes, card_entries, release_codes)
 
     console.print("\n[bold]Collection stats[/bold]\n")
@@ -394,6 +498,43 @@ def stats_command(
         console.print(
             "\n[dim]No sets owned yet. Add one with [bold]mtgsets add <set>[/bold].[/dim]"
         )
+        return
+
+    # -- composition sections (local, no network) --------------------------
+    if rarity:
+        _print_breakdown("By rarity", stats.composition_by_rarity(owned_cards))
+    if colors:
+        _print_breakdown("By color", stats.composition_by_color(owned_cards))
+    if types:
+        _print_breakdown("By type", stats.composition_by_type(owned_cards))
+    if curve:
+        _print_breakdown("Mana curve (nonland)", stats.mana_curve(owned_cards))
+
+    # -- progress section --------------------------------------------------
+    if progress:
+        if all_sets is None:
+            console.print(
+                "\n[yellow]Progress[/yellow] needs Scryfall; skipped "
+                "(unreachable or [bold]--no-remote[/bold])."
+            )
+        else:
+            today = datetime.now(timezone.utc).date()
+            _print_progress(
+                stats.build_progress(owned_added, all_sets, scryfall.release_sets(all_sets), today)
+            )
+
+    # -- value section -----------------------------------------------------
+    if value:
+        if no_remote:
+            console.print(
+                "\n[yellow]Value[/yellow] needs live Scryfall prices; skipped "
+                "([bold]--no-remote[/bold])."
+            )
+        elif live_prices is None:
+            console.print("\n[yellow]Value[/yellow] skipped — could not fetch current prices.")
+        else:
+            priced = [(qty, live_prices.get(c["id"], c)) for qty, c in owned_cards]
+            _print_value(stats.build_value(priced))
 
 
 @app.command()

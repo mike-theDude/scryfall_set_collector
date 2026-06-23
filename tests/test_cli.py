@@ -24,12 +24,14 @@ NEO_SET = {
     "name": "Kamigawa: Neon Dynasty",
     "set_type": "expansion",
     "digital": False,
+    "released_at": "2022-02-18",
 }
 MOM_SET = {
     "code": "mom",
     "name": "March of the Machine",
     "set_type": "expansion",
     "digital": False,
+    "released_at": "2023-04-21",
 }
 
 
@@ -279,3 +281,48 @@ def test_stats_degrades_when_scryfall_unreachable(monkeypatch, db_path) -> None:
     assert result.exit_code == 0, result.output
     assert "could not reach Scryfall" in result.output
     assert "Sets owned" in result.output
+
+
+# -- stats breakdown flags (issue #53) -------------------------------------------
+
+
+def test_stats_rarity_and_types_sections(mock_scryfall, db_path) -> None:
+    assert add_neo(db_path).exit_code == 0
+    result = runner.invoke(app, ["stats", "--rarity", "--types", "--db-path", str(db_path)])
+    assert result.exit_code == 0, result.output
+    assert "By rarity" in result.output
+    assert "By type" in result.output
+    # The NEO fixture has a basic land (Land) and the plain card is a creature/etc.
+    assert "Land" in result.output
+
+
+def test_stats_all_runs_every_section(mock_scryfall, db_path) -> None:
+    assert add_neo(db_path).exit_code == 0
+    result = runner.invoke(app, ["stats", "--all", "--db-path", str(db_path)])
+    assert result.exit_code == 0, result.output
+    for header in ("By rarity", "By color", "By type", "Mana curve", "Progress"):
+        assert header in result.output, header
+    # --value fetches live prices.
+    assert "Fetching current prices" in result.output
+    assert "Estimated value" in result.output
+    # Progress sees NEO as newest/oldest owned.
+    assert "Newest owned" in result.output and "NEO" in result.output
+
+
+def test_stats_value_skipped_with_no_remote(mock_scryfall, db_path) -> None:
+    assert add_neo(db_path).exit_code == 0
+    result = runner.invoke(
+        app, ["stats", "--value", "--no-remote", "--db-path", str(db_path)]
+    )
+    assert result.exit_code == 0, result.output
+    assert "needs live Scryfall prices" in result.output
+    assert "Fetching current prices" not in result.output
+
+
+def test_stats_progress_skipped_with_no_remote(mock_scryfall, db_path) -> None:
+    assert add_neo(db_path).exit_code == 0
+    result = runner.invoke(
+        app, ["stats", "--progress", "--no-remote", "--db-path", str(db_path)]
+    )
+    assert result.exit_code == 0, result.output
+    assert "needs Scryfall" in result.output
