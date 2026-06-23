@@ -87,6 +87,7 @@ mtgsets init                 # create data/collection.db
 mtgsets search neo           # find a set's code
 mtgsets preview NEO          # check what will be included/excluded
 mtgsets add NEO              # mark owned + generate card entries
+mtgsets add-multi NEO DFT MOM  # add several owned sets in one run
 mtgsets list                 # review what you own
 mtgsets export moxfield      # write exports/moxfield.csv
 ```
@@ -102,6 +103,7 @@ Then import `exports/moxfield.csv` into Moxfield via your collection's
 | `mtgsets search <query>` | Search Scryfall sets by name or code substring. |
 | `mtgsets preview <set_code>` | Show the included/excluded breakdown before adding. |
 | `mtgsets add <set_code>` | Mark a set fully owned and generate its card entries. |
+| `mtgsets add-multi <set_code>...` | Add several sets in one run, best-effort per set. |
 | `mtgsets list` | List owned sets and their generated entry counts. |
 | `mtgsets remove <set_code>` | Remove a set and **only** its generated entries. |
 | `mtgsets export moxfield` | Export the collection as a Moxfield CSV. |

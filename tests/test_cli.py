@@ -20,25 +20,34 @@ from mtgsets.scryfall import ScryfallClient
 runner = CliRunner()
 
 NEO_SET = {"code": "neo", "name": "Kamigawa: Neon Dynasty"}
+MOM_SET = {"code": "mom", "name": "March of the Machine"}
 
 
 @pytest.fixture
 def mock_scryfall(monkeypatch, neo_cards):
     """Patch ScryfallClient so add/preview serve the NEO fixtures over a mock
-    transport. /sets/neo and set:neo searches succeed; everything else 404s."""
+    transport. /sets/neo and /sets/mom (and their card searches) succeed using
+    the same NEO fixture cards; everything else 404s. A second known set lets
+    the multi-set ``add`` tests exercise more than one good code per run."""
+
+    sets_by_code = {"neo": NEO_SET, "mom": MOM_SET}
 
     def handler(request: httpx.Request) -> httpx.Response:
         path = request.url.path
-        if path == "/sets/neo":
-            return httpx.Response(200, json=NEO_SET)
         if path.startswith("/sets/"):
+            code = path.removeprefix("/sets/")
+            if code in sets_by_code:
+                return httpx.Response(200, json=sets_by_code[code])
             return httpx.Response(404, json={"details": "Set not found"})
         if path == "/cards/search":
-            if request.url.params.get("q") == "set:neo":
+            q = request.url.params.get("q")
+            if q in ("set:neo", "set:mom"):
                 return httpx.Response(200, json={"data": neo_cards, "has_more": False})
             return httpx.Response(404, json={"details": "no cards found"})
         if path == "/sets":
-            return httpx.Response(200, json={"data": [NEO_SET], "has_more": False})
+            return httpx.Response(
+                200, json={"data": list(sets_by_code.values()), "has_more": False}
+            )
         return httpx.Response(404, json={"details": "unexpected path"})
 
     monkeypatch.setattr(scryfall, "_REQUEST_DELAY", 0.0)
@@ -167,6 +176,47 @@ def test_preview_unknown_set_exits_1(mock_scryfall) -> None:
     result = runner.invoke(app, ["preview", "ZZZ"])
     assert result.exit_code == 1
     assert "No set found" in result.output
+
+
+# -- add-multi: multiple set codes -----------------------------------------------
+
+
+def test_add_multi_all_succeed(mock_scryfall, db_path) -> None:
+    result = runner.invoke(app, ["add-multi", "NEO", "MOM", "--db-path", str(db_path)])
+    assert result.exit_code == 0, result.output
+    assert "Added Kamigawa: Neon Dynasty" in result.output
+    assert "Added March of the Machine" in result.output
+    assert "2 added." in result.output
+
+    # both sets are now owned
+    listing = runner.invoke(app, ["list", "--db-path", str(db_path)])
+    assert "NEO" in listing.output
+    assert "MOM" in listing.output
+
+
+def test_add_multi_mixed_skip_and_failure(mock_scryfall, db_path) -> None:
+    # NEO is pre-owned (skipped), MOM is new (added), ZZZ is unknown (failed).
+    assert add_neo(db_path).exit_code == 0
+
+    result = runner.invoke(app, ["add-multi", "NEO", "MOM", "ZZZ", "--db-path", str(db_path)])
+    assert result.exit_code == 1, result.output
+    assert "Skipped NEO" in result.output and "already owned" in result.output
+    assert "Added March of the Machine" in result.output
+    assert "Failed ZZZ" in result.output and "No set found" in result.output
+    assert "1 added, 1 skipped, 1 failed." in result.output
+
+    # the one good new set still landed despite the skip and failure
+    listing = runner.invoke(app, ["list", "--db-path", str(db_path)])
+    assert "MOM" in listing.output
+
+
+def test_add_multi_deduplicates_repeated_codes(mock_scryfall, db_path) -> None:
+    # NEO repeated (and in mixed case) should be added exactly once, not skipped.
+    result = runner.invoke(app, ["add-multi", "NEO", "neo", "NEO", "--db-path", str(db_path)])
+    assert result.exit_code == 0, result.output
+    assert result.output.count("Added Kamigawa: Neon Dynasty") == 1
+    assert "already owned" not in result.output
+    assert "1 added." in result.output
 
 
 # -- search ----------------------------------------------------------------------
