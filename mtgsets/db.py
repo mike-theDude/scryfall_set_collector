@@ -227,6 +227,28 @@ def count_full_set_entries(conn: sqlite3.Connection, set_code: str) -> int:
     ).fetchone()[0]
 
 
+def delete_full_set_entries(conn: sqlite3.Connection, set_code: str) -> int:
+    """Delete ONLY the generated full-set entries for ``set_code``.
+
+    Unlike :func:`remove_owned_set`, the owned_sets row is left in place — this is
+    the half a ``refresh`` needs to regenerate entries while keeping ownership.
+    Matches source_type='full_set' AND source_set_code=<set>, so manual singles and
+    overrides are never touched. Does not commit (caller owns the transaction).
+    """
+    return conn.execute(
+        "DELETE FROM collection_entries WHERE source_type = 'full_set' AND source_set_code = ?",
+        (set_code.lower(),),
+    ).rowcount
+
+
+def update_owned_set_name(conn: sqlite3.Connection, set_code: str, set_name: str) -> None:
+    """Update an owned set's cached display name (e.g. on refresh). No commit."""
+    conn.execute(
+        "UPDATE owned_sets SET set_name = ? WHERE set_code = ?",
+        (set_name, set_code.lower()),
+    )
+
+
 def remove_owned_set(conn: sqlite3.Connection, set_code: str) -> tuple[int, bool]:
     """Remove an owned set and ONLY its generated entries.
 

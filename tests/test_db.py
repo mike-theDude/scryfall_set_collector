@@ -166,6 +166,36 @@ def test_remove_unowned_set_is_noop(conn) -> None:
     assert set_existed is False
 
 
+# -- delete_full_set_entries (refresh half) ---------------------------------------
+
+
+def test_delete_full_set_entries_keeps_owned_row_and_others(conn) -> None:
+    # The refresh path deletes a set's generated entries but keeps the owned_sets
+    # row (unlike remove). Manual singles and overrides must still survive.
+    seed_removal_scenario(conn)
+
+    deleted = db.delete_full_set_entries(conn, "NEO")  # case-insensitive
+    conn.commit()
+    assert deleted == 2  # only NEO's two full_set rows
+
+    # NEO is still owned — only its generated entries were dropped.
+    assert db.is_set_owned(conn, "neo") is True
+    assert entry_signatures(conn) == {
+        ("mom-1", "full_set", "mom"),
+        ("manual-1", "manual", None),
+        ("override-1", "override", "neo"),
+    }
+
+
+def test_update_owned_set_name(conn) -> None:
+    db.insert_owned_set(conn, set_code="neo", set_name="Old Name", added_at="2024-01-01")
+    conn.commit()
+    db.update_owned_set_name(conn, "NEO", "Kamigawa: Neon Dynasty")
+    conn.commit()
+    rows = db.list_owned_sets(conn)
+    assert rows[0]["set_name"] == "Kamigawa: Neon Dynasty"
+
+
 # -- count_full_set_entries -------------------------------------------------------
 
 

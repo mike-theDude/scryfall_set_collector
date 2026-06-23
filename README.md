@@ -125,6 +125,7 @@ Then import `exports/moxfield.csv` into Moxfield via your collection's
 | `mtgsets preview <set_code>` | Show the included/excluded breakdown before adding. |
 | `mtgsets add <set_code>` | Mark a set fully owned and generate its card entries. |
 | `mtgsets add-multi <set_code>...` | Add several sets in one run, best-effort per set. |
+| `mtgsets refresh <set_code>` | Re-fetch an owned set from Scryfall and refresh its cached data (prices, etc.). |
 | `mtgsets list` | List owned sets and their generated entry counts. |
 | `mtgsets stats` | Show collection stats — sets owned vs. the total number of sets. |
 | `mtgsets remove <set_code>` | Remove a set and **only** its generated entries. |
@@ -160,8 +161,9 @@ Add flags for deeper breakdowns (or `--all` for everything):
 | `--no-remote` | Skip Scryfall entirely — composition and `--value` still work; the total-sets, `--progress`, and `--year` sections are omitted. |
 
 `--rarity`, `--colors`, `--types`, `--curve`, and `--value` read the locally cached
-card data (no network). `--value` uses the prices stored when each set was added, so
-it works offline but is only as fresh as that snapshot. `--progress` and `--year` use
+card data (no network). `--value` uses the prices stored when each set was added or
+last refreshed, so it works offline but is only as fresh as that snapshot — run
+`mtgsets refresh <set>` to pull current prices. `--progress` and `--year` use
 the Scryfall set list, so they need a connection (and are skipped under `--no-remote`).
 
 ```
@@ -261,7 +263,7 @@ test suite makes no network calls — the Scryfall API is mocked.
 
 ## Roadmap
 
-The initial CLI is complete: `init`, `search`, `preview`, `add`, `list`, `remove`,
-and `export moxfield`. Planned next: `refresh`, `stats`, `show`, single-card
+The initial CLI is complete: `init`, `search`, `preview`, `add`, `refresh`, `list`,
+`stats`, `remove`, and `export moxfield`. Planned next: `show`, single-card
 `add-card`/`remove-card`, and `check-deck` (compare a decklist against your
 collection). Feature work is tracked as GitHub issues.

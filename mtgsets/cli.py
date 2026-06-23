@@ -285,6 +285,84 @@ def add_multi(
         raise typer.Exit(1)
 
 
+@app.command()
+def refresh(
+    set_code: str = typer.Argument(..., help="Set code, e.g. NEO."),
+    db_path: Path = typer.Option(db.DB_PATH, "--db-path", help="Database file location."),
+) -> None:
+    """Re-fetch an owned set from Scryfall and refresh its cached data.
+
+    Updates the cached card data (prices, type lines, etc.) and regenerates the
+    set's full-set entries against the current filter rules, so newly added or
+    removed printings are reconciled. Only ``full_set`` entries for this set are
+    touched — manual singles and overrides, and the original ownership date, are
+    preserved.
+    """
+    if not Path(db_path).exists():
+        console.print(
+            "No collection database yet. Run [bold]mtgsets init[/bold] and "
+            "[bold]mtgsets add <set>[/bold] first."
+        )
+        raise typer.Exit(1)
+
+    code = set_code.strip().lower()
+    display_code = code.upper()
+
+    conn = db.get_connection(db_path)
+    try:
+        if not db.is_set_owned(conn, code):
+            console.print(
+                f"[yellow]{display_code} is not owned.[/yellow] Add it with "
+                f"[bold]mtgsets add {display_code}[/bold]."
+            )
+            raise typer.Exit(1)
+        before = db.count_full_set_entries(conn, code)
+    finally:
+        conn.close()
+
+    # -- re-fetch (network boundary); _load_set exits with a message on failure ---
+    set_obj, cards = _load_set(code)
+    code = (set_obj.get("code") or code).lower()
+    display_code = code.upper()
+    set_name = set_obj.get("name", display_code)
+    breakdown = collection.build_breakdown(cards)
+
+    if not breakdown.included_count:
+        console.print(
+            f"[yellow]Not refreshed:[/yellow] no cards qualify for the full set of "
+            f"[bold]{display_code}[/bold] (unreleased, or printings don't match the "
+            "full-set rules?). The existing entries were left untouched."
+        )
+        raise typer.Exit(1)
+
+    entries = collection.generate_full_set_entries(code, breakdown.included)
+    conn = db.get_connection(db_path)
+    try:
+        try:
+            cards_written = db.upsert_cards(conn, breakdown.included)
+            db.delete_full_set_entries(conn, code)
+            after = db.insert_collection_entries(conn, (e.as_row() for e in entries))
+            db.update_owned_set_name(conn, code, set_name)
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+    finally:
+        conn.close()
+
+    delta = after - before
+    if delta:
+        sign = "+" if delta > 0 else ""
+        change = f" [yellow]({sign}{delta} vs. before)[/yellow]"
+    else:
+        change = " [dim](unchanged)[/dim]"
+    console.print(
+        f"[green]Refreshed[/green] {set_name} ([cyan]{display_code}[/cyan]): "
+        f"[green]{cards_written}[/green] cards cached, [green]{after}[/green] entries"
+        f"{change} ([dim]{len(breakdown.main_cards)} main + {len(breakdown.basics)} basics[/dim])."
+    )
+
+
 @app.command(name="list")
 def list_sets(
     db_path: Path = typer.Option(db.DB_PATH, "--db-path", help="Database file location."),
@@ -384,35 +462,30 @@ def _print_year(y: stats.YearStats) -> None:
         console.print("  Owned:")
         for r in y.owned:
             console.print(
-                f"    [green]✓[/green] [cyan]{r.code.upper()}[/cyan] "
-                f"({r.released_at}) — {r.name}"
+                f"    [green]✓[/green] [cyan]{r.code.upper()}[/cyan] ({r.released_at}) — {r.name}"
             )
     if y.missing:
         console.print("  Missing:")
         for r in y.missing:
             console.print(
-                f"    [red]✗[/red] [cyan]{r.code.upper()}[/cyan] "
-                f"({r.released_at}) — {r.name}"
+                f"    [red]✗[/red] [cyan]{r.code.upper()}[/cyan] ({r.released_at}) — {r.name}"
             )
     if y.upcoming:
         console.print("  Upcoming [dim](not released yet)[/dim]:")
         for r in y.upcoming:
             console.print(
-                f"    [yellow]…[/yellow] [cyan]{r.code.upper()}[/cyan] "
-                f"({r.released_at}) — {r.name}"
+                f"    [yellow]…[/yellow] [cyan]{r.code.upper()}[/cyan] ({r.released_at}) — {r.name}"
             )
     if y.owned_other:
         console.print("  Other owned [dim](Commander, Masters, etc.)[/dim]:")
         for r in y.owned_other:
-            console.print(
-                f"    [cyan]{r.code.upper()}[/cyan] ({r.released_at}) — {r.name}"
-            )
+            console.print(f"    [cyan]{r.code.upper()}[/cyan] ({r.released_at}) — {r.name}")
 
 
 def _print_value(v: stats.ValueStats) -> None:
     console.print(
         f"\n[bold]Estimated value[/bold]  [green]${v.total_usd:,.2f}[/green]  "
-        "[dim](cached USD prices, as of when each set was added)[/dim]"
+        "[dim](cached USD prices; run [bold]mtgsets refresh <set>[/bold] to update)[/dim]"
     )
     if v.unpriced_count:
         console.print(f"  [dim]{v.unpriced_count} card(s) had no USD price[/dim]")
