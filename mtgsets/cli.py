@@ -133,6 +133,70 @@ def preview(set_code: str = typer.Argument(..., help="Set code, e.g. NEO.")) -> 
         )
 
 
+def _add_one_set(conn, set_code: str) -> str:
+    """Add a single set in its own transaction, best-effort.
+
+    Fetches, filters and writes one set exactly like the single-set path, but
+    never raises ``typer.Exit`` — each outcome (success, skip, failure) prints
+    its own line and returns a status so a multi-set ``add`` can keep going.
+
+    Returns one of ``"added"``, ``"skipped"``, or ``"failed"``.
+    """
+    display_code = set_code.strip().upper()
+
+    # -- fetch (network boundary) -------------------------------------------
+    try:
+        with scryfall.ScryfallClient() as client:
+            code = set_code.strip().lower()
+            set_obj = client.get_set(code)
+            cards = client.get_set_cards(code)
+    except scryfall.ScryfallError as exc:
+        if exc.status_code == 404:
+            console.print(
+                f"[red]Failed {display_code}:[/red] No set found "
+                "(try [bold]mtgsets search[/bold])."
+            )
+        else:
+            console.print(f"[red]Failed {display_code}:[/red] Scryfall request failed: {exc}")
+        return "failed"
+
+    code = (set_obj.get("code") or set_code).lower()
+    display_code = code.upper()
+    set_name = set_obj.get("name", display_code)
+    breakdown = collection.build_breakdown(cards)
+
+    if not breakdown.included_count:
+        console.print(
+            f"[yellow]Skipped {display_code}:[/yellow] no cards qualify for the full set "
+            "(unreleased or boosterless?)."
+        )
+        return "skipped"
+
+    if db.is_set_owned(conn, code):
+        console.print(f"[yellow]Skipped {display_code}:[/yellow] already owned.")
+        return "skipped"
+
+    # -- write (own transaction) --------------------------------------------
+    entries = collection.generate_full_set_entries(code, breakdown.included)
+    added_at = datetime.now(timezone.utc).isoformat()
+    try:
+        db.upsert_cards(conn, breakdown.included)
+        db.insert_owned_set(conn, set_code=code, set_name=set_name, added_at=added_at)
+        written = db.insert_collection_entries(conn, (e.as_row() for e in entries))
+        conn.commit()
+    except Exception as exc:
+        conn.rollback()
+        console.print(f"[red]Failed {display_code}:[/red] {exc}")
+        return "failed"
+
+    console.print(
+        f"[green]Added[/green] {set_name} ([cyan]{display_code}[/cyan]): "
+        f"[green]{written}[/green] entries "
+        f"([dim]{len(breakdown.main_cards)} main + {len(breakdown.basics)} basics[/dim])."
+    )
+    return "added"
+
+
 @app.command()
 def add(
     set_code: str = typer.Argument(..., help="Set code, e.g. NEO."),
@@ -184,6 +248,42 @@ def add(
         f"([cyan]{display_code}[/cyan]): generated [green]{written}[/green] entries "
         f"([dim]{len(breakdown.main_cards)} main + {len(breakdown.basics)} basics[/dim])."
     )
+
+
+@app.command(name="add-multi")
+def add_multi(
+    set_codes: list[str] = typer.Argument(..., help="One or more set codes, e.g. NEO DFT."),
+    db_path: Path = typer.Option(db.DB_PATH, "--db-path", help="Database file location."),
+) -> None:
+    """Mark several sets as fully owned in one run, best-effort.
+
+    Each set is processed independently: one set failing (unknown code, already
+    owned, nothing qualifies) does not abort the others. Repeated codes are
+    de-duplicated. Exits non-zero if any set was skipped or failed.
+    """
+    # De-duplicate repeated codes, preserving first-seen order.
+    seen: set[str] = set()
+    codes: list[str] = []
+    for raw in set_codes:
+        code = raw.strip().lower()
+        if code and code not in seen:
+            seen.add(code)
+            codes.append(raw)
+
+    db.init_db(db_path)
+    conn = db.get_connection(db_path)
+    counts = {"added": 0, "skipped": 0, "failed": 0}
+    try:
+        for raw in codes:
+            counts[_add_one_set(conn, raw)] += 1
+    finally:
+        conn.close()
+
+    summary = ", ".join(f"{counts[k]} {k}" for k in ("added", "skipped", "failed") if counts[k])
+    console.print(f"\n{summary}.")
+
+    if counts["skipped"] or counts["failed"]:
+        raise typer.Exit(1)
 
 
 @app.command(name="list")
