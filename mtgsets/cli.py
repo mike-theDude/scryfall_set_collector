@@ -9,8 +9,12 @@ runs end to end, but the bodies are stubs filled in by issues #2-#10.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import typer
 from rich.console import Console
+
+from . import db
 
 app = typer.Typer(
     name="mtgsets",
@@ -24,9 +28,20 @@ _TODO = "[yellow]not yet implemented[/yellow]"
 
 
 @app.command()
-def init() -> None:
-    """Create the local SQLite database (issue #2)."""
-    console.print(f"init: {_TODO}")
+def init(
+    db_path: Path = typer.Option(
+        db.DB_PATH, "--db-path", help="Database file location."
+    ),
+) -> None:
+    """Create the local SQLite database and schema."""
+    created = db.init_db(db_path)
+    if created:
+        console.print(f"[green]Initialized[/green] database at [bold]{db_path}[/bold]")
+    else:
+        console.print(
+            f"[yellow]Database already exists[/yellow] at [bold]{db_path}[/bold] "
+            "(schema ensured)"
+        )
 
 
 @app.command()
