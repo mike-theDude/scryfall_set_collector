@@ -1,10 +1,11 @@
 # Claude Code local settings
 .claude/settings.local.json
 
-# Local app data and generated output
-data/collection.db
+# Local app data and generated output (keep the dirs, ignore their contents)
 data/*.db
-exports/
+exports/*
+!data/.gitkeep
+!exports/.gitkeep
 
 # Python
 __pycache__/
