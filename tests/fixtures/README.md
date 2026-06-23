@@ -19,6 +19,7 @@ could mask a regression the real shapes would catch.
 |---|---|
 | `neo_cards.json` | A trimmed subset of Kamigawa: Neon Dynasty (NEO) `unique=prints`: included main cards (plain + intrinsic `legendary`/`enchantment`/`fandfc` frames), a basic land, and the excluded reasons NEO actually contains (non-English, borderless/showcase variant, promo). |
 | `exclusion_samples.json` | One real card per exclusion reason NEO's print data lacks — token (TNEO), serialized (BRR), oversized (OLEP), variation (AER), and not-in-the-regular-set (MOM #332). Pulled from across sets so every filter branch has a real representative. |
+| `booster_false_sets.json` | Cards from sets where *every* printing is `booster == false` (SOS, TMT) — issue #50. Main cards + a basic that must be **included** despite `booster == false`, plus a borderless variant (SOS) and a surgefoil foil-only basic (TMT #305) that must still be **excluded**. Exercises the set-relative membership gate (`filters.set_uses_booster`). |
 
 Between the two files, every branch of `filters.exclusion_reason` is exercised by
 a real card.

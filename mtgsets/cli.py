@@ -129,7 +129,7 @@ def preview(set_code: str = typer.Argument(..., help="Set code, e.g. NEO.")) -> 
     if not breakdown.included_count:
         console.print(
             "\n[yellow]Warning:[/yellow] no cards qualify for the full set — this set "
-            "may be unreleased or boosterless."
+            "may be unreleased, or its printings may not match the full-set rules."
         )
 
 
@@ -167,7 +167,7 @@ def _add_one_set(conn, set_code: str) -> str:
     if not breakdown.included_count:
         console.print(
             f"[yellow]Skipped {display_code}:[/yellow] no cards qualify for the full set "
-            "(unreleased or boosterless?)."
+            "(unreleased, or printings don't match the full-set rules?)."
         )
         return "skipped"
 
