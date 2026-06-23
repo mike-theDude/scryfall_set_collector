@@ -43,10 +43,15 @@ class ScryfallClient:
     """Thin synchronous client over the Scryfall REST API."""
 
     def __init__(
-        self, base_url: str = SCRYFALL_API_BASE, timeout: float = 30.0
+        self,
+        base_url: str = SCRYFALL_API_BASE,
+        timeout: float = 30.0,
+        transport: httpx.BaseTransport | None = None,
     ) -> None:
+        # ``transport`` is a test seam (e.g. httpx.MockTransport); it defaults to
+        # None so production uses httpx's real network transport unchanged.
         self._client = httpx.Client(
-            base_url=base_url, headers=_HEADERS, timeout=timeout
+            base_url=base_url, headers=_HEADERS, timeout=timeout, transport=transport
         )
 
     def __enter__(self) -> "ScryfallClient":
