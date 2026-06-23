@@ -110,6 +110,7 @@ mtgsets preview NEO          # check what will be included/excluded
 mtgsets add NEO              # mark owned + generate card entries
 mtgsets add-multi NEO DFT MOM  # add several owned sets in one run
 mtgsets list                 # review what you own
+mtgsets show NEO             # inspect one set's details and contents
 mtgsets export moxfield      # write exports/moxfield.csv
 ```
 
@@ -127,6 +128,7 @@ Then import `exports/moxfield.csv` into Moxfield via your collection's
 | `mtgsets add-multi <set_code>...` | Add several sets in one run, best-effort per set. |
 | `mtgsets refresh <set_code>` | Re-fetch an owned set from Scryfall and refresh its cached data (prices, etc.). |
 | `mtgsets list` | List owned sets and their generated entry counts. |
+| `mtgsets show <set_code>` | Show one owned set's details and its card-level contents. |
 | `mtgsets stats` | Show collection stats — sets owned vs. the total number of sets. |
 | `mtgsets remove <set_code>` | Remove a set and **only** its generated entries. |
 | `mtgsets export moxfield` | Export the collection as a Moxfield CSV. |
@@ -264,6 +266,6 @@ test suite makes no network calls — the Scryfall API is mocked.
 ## Roadmap
 
 The initial CLI is complete: `init`, `search`, `preview`, `add`, `refresh`, `list`,
-`stats`, `remove`, and `export moxfield`. Planned next: `show`, single-card
-`add-card`/`remove-card`, and `check-deck` (compare a decklist against your
-collection). Feature work is tracked as GitHub issues.
+`show`, `stats`, `remove`, and `export moxfield`. Planned next: single-card
+`add-card`/`remove-card`, `import-csv`, and `check-deck` (compare a decklist against
+your collection). Feature work is tracked as GitHub issues.

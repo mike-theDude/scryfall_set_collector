@@ -228,6 +228,33 @@ def test_list_owned_sets_zero_entries(conn) -> None:
     assert rows[0]["entry_count"] == 0
 
 
+# -- get_owned_cards scoping / get_owned_set --------------------------------------
+
+
+def test_get_owned_cards_scoped_to_one_set(conn) -> None:
+    seed_removal_scenario(conn)
+    # Whole collection: every entry (2 NEO full_set + 1 MOM + manual + override).
+    assert len(db.get_owned_cards(conn)) == 5
+    # Scoped to NEO: only its two generated full_set cards — the manual single and
+    # override tagged with neo are NOT part of the set's contents.
+    neo = db.get_owned_cards(conn, source_set_code="NEO")  # case-insensitive
+    assert sorted(c["id"] for _, c in neo) == ["neo-1", "neo-2"]
+    mom = db.get_owned_cards(conn, source_set_code="mom")
+    assert [c["id"] for _, c in mom] == ["mom-1"]
+    assert db.get_owned_cards(conn, source_set_code="unknown") == []
+
+
+def test_get_owned_set_returns_row_or_none(conn) -> None:
+    db.insert_owned_set(conn, set_code="neo", set_name="Neon Dynasty", added_at="2024-02-01")
+    conn.commit()
+    row = db.get_owned_set(conn, "NEO")  # case-insensitive
+    assert row is not None
+    assert row["set_code"] == "neo"
+    assert row["set_name"] == "Neon Dynasty"
+    assert row["added_at"] == "2024-02-01"
+    assert db.get_owned_set(conn, "mom") is None
+
+
 # -- get_export_entries -----------------------------------------------------------
 
 
