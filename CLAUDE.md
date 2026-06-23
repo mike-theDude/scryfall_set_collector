@@ -3,6 +3,19 @@
 Guidance for working in this repo. Read alongside [README.md](README.md) (user-facing
 usage) and [docs/DESIGN.md](docs/DESIGN.md) (the canonical schema / export / filter spec).
 
+## Follow the design doc (enforced)
+
+**Read [docs/DESIGN.md](docs/DESIGN.md) before writing or changing any code, and build
+to it.** It is the canonical spec for the database schema, the Moxfield export format,
+and the full-set filtering rules. Implementations must match it — same table/column
+definitions, same export columns and defaults, same include/exclude logic.
+
+- Do not invent schema, export columns, or filter conditions that contradict the doc.
+- If the design needs to change, **update `docs/DESIGN.md` first** (in the same PR),
+  then implement — never let code and spec silently diverge.
+- Once code becomes the source of truth for a concern, keep the doc in sync (or trim it
+  to rationale). The doc and the code must always agree.
+
 ## What this is
 
 `mtgsets` — a Python CLI for managing a Magic: The Gathering collection by **full
@@ -49,6 +62,23 @@ mtgsets/
 data/collection.db  # local db (gitignored)
 exports/            # generated CSVs (gitignored)
 ```
+
+## Workflow — issue branches (enforced)
+
+All issue work happens on a dedicated branch. **Do not commit issue work directly to
+`main`.**
+
+- **One branch per issue**, cut from an up-to-date `main`.
+- **Branch name:** `<issue#>-<short-kebab-context>` — the issue number first, then a
+  few words of context from the issue title. Examples:
+  - `4-filters-full-set-rules`  (issue #4)
+  - `2-init-sqlite-schema`  (issue #2)
+  - `9-safe-set-removal`  (issue #9)
+- Before starting an issue: `git checkout main && git pull`, then
+  `git checkout -b <issue#>-<context>`.
+- Reference the issue in commits, and open a PR whose description closes it
+  (`Closes #<issue#>`) so merging auto-closes the issue.
+- Keep a branch scoped to its single issue; spin up a new branch for a new issue.
 
 ## Conventions
 
