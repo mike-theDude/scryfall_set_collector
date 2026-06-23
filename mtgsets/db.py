@@ -182,6 +182,24 @@ def list_owned_sets(conn: sqlite3.Connection) -> list[sqlite3.Row]:
     ).fetchall()
 
 
+def get_export_entries(conn: sqlite3.Connection) -> list[sqlite3.Row]:
+    """Return every collection entry joined to its cached card, for export.
+
+    Ordered by set then collector number (numeric where possible). Exposes the
+    card's name/set_code/collector_number alongside the entry's quantity,
+    condition, language, foil, source_type and source_set_code.
+    """
+    return conn.execute(
+        "SELECT c.name, c.set_code, c.collector_number, "
+        "e.quantity, e.condition, e.language, e.foil, "
+        "e.source_type, e.source_set_code "
+        "FROM collection_entries e "
+        "JOIN cards c ON c.scryfall_id = e.scryfall_id "
+        "ORDER BY c.set_code, "
+        "CAST(c.collector_number AS INTEGER), c.collector_number",
+    ).fetchall()
+
+
 def count_full_set_entries(conn: sqlite3.Connection, set_code: str) -> int:
     """Return how many generated full-set entries exist for ``set_code``."""
     return conn.execute(
