@@ -1,0 +1,22 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "mtgsets"
+version = "0.1.0"
+description = "Manage a Magic: The Gathering collection by full set and export to Moxfield."
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{ name = "mike-theDude" }]
+dependencies = [
+    "typer>=0.12",
+    "rich>=13.0",
+    "httpx>=0.27",
+]
+
+[project.scripts]
+mtgsets = "mtgsets.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["mtgsets"]
