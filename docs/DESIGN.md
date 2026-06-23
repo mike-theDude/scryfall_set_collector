@@ -37,31 +37,46 @@ English, nonfoil copy of every card in the regular main set, including basic lan
 
 All inclusion/exclusion logic lives in **one place** (`mtgsets/filters.py`) so it can
 be tuned after testing against real set data. Do not scatter filter conditions
-across the codebase, and do not over-hard-code early.
+across the codebase, and do not over-hard-code early. **`filters.py` is the
+authoritative source for these rules**; this section is kept in sync as rationale.
 
-**Initial rule concept**
+A printing is included **iff** none of the ordered exclusion checks below fire
+(`filters.exclusion_reason` returns `None`); `filters.is_main_set_card` is the
+boolean form. Checks are ordered so the reason returned is the most informative
+bucket for `preview` (a borderless promo reports as a promo; a boosterfun showcase
+as a variant rather than merely "not in set").
 
-Include a card if:
+Exclusion checks, in priority order:
 
-- it is a paper card (`games` contains `paper`)
-- language is English (`lang == "en"`)
-- not digital (`digital == false`)
-- it belongs to the selected main set code
-- it is part of the regular main set
-- (basic lands are included)
+1. **Non-English / non-paper / digital-only** — `lang != "en"`, `digital == true`,
+   or `paper` not in `games`.
+2. **Tokens / art cards / non-playable** — `layout` in `{token, double_faced_token,
+   emblem, art_series, vanguard, scheme, planar}`.
+3. **Oversized** — `oversized == true`.
+4. **Serialized** — `promo_types` contains `serialized`.
+5. **Promos** — `promo == true`.
+6. **Borderless / showcase / extended-art variants** — `border_color ==
+   "borderless"`, a `frame_effects` of `showcase`/`extendedart`/`inverted`,
+   `promo_types` containing `boosterfun`, or an etched-only `finishes`.
+7. **Alternate printing / variation** — `variation == true`.
+8. **Not in the regular set** — `booster != true`. This is the membership gate that
+   removes deck-exclusive / Jumpstart / promo-only extras carrying no other marker.
 
-Exclude a card if it is a:
+**Tuning notes** (validated live against NEO → 292 cards and MOM → 291 cards):
 
-- token / art card / promo
-- variation / alternate treatment
-- oversized / digital-only
-- Commander deck product
-- borderless / showcase / extended-art / collector variant
+- `booster == true` is the reliable main-set membership signal, and already excludes
+  every `boosterfun` collector treatment. Cards like MOM #323–337 are plain `normal`
+  printings distinguishable only by `booster == false`.
+- Most `frame_effects` are **intrinsic** to the regular printing and must NOT be
+  treated as variants: `legendary`, `enchantment`, `fandfc`, `fullart`, etc. Only
+  `showcase`, `extendedart`, `inverted` mark alternate treatments.
+- Basic lands of the main set are kept (they are `booster == true`). NEO's Japanese
+  full-art "ukiyo-e" basics arrive as `lang == "ja"` and drop out at check 1.
 
-**Scryfall fields likely relevant to filtering** (exact usage needs testing against
-real sets): `id`, `name`, `set`, `set_name`, `set_type`, `collector_number`, `lang`,
-`games`, `digital`, `promo`, `variation`, `booster`, `layout`, `type_line`, `rarity`,
-`finishes`, `border_color`, `frame_effects`, and the full JSON object.
+**Scryfall fields used:** `lang`, `games`, `digital`, `layout`, `oversized`,
+`promo`, `promo_types`, `variation`, `booster`, `border_color`, `frame_effects`,
+`finishes` (plus `id`, `name`, `set`, `collector_number`, `type_line`, `rarity` for
+storage/display and the full JSON object).
 
 ---
 
