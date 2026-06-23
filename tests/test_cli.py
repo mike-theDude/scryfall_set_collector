@@ -377,6 +377,99 @@ def test_remove_card_missing_db_exits_1(db_path) -> None:
     assert "nothing to remove" in result.output
 
 
+# -- import-csv ------------------------------------------------------------------
+
+MOX_HEADER = "Count,Tradelist Count,Name,Edition,Condition,Language,Foil,Tags,Collector Number"
+
+
+def write_csv(tmp_path, *rows: str):
+    path = tmp_path / "in.csv"
+    path.write_text("\n".join([MOX_HEADER, *rows]) + "\n", encoding="utf-8")
+    return path
+
+
+def test_import_csv_adds_manual_singles(mock_scryfall, db_path, tmp_path) -> None:
+    csv_path = write_csv(
+        tmp_path,
+        "1,0,Ao the Dawn Sky,NEO,Near Mint,English,,,2",
+        "2,0,Plains,NEO,Near Mint,English,foil,,283",
+    )
+    result = runner.invoke(app, ["import-csv", str(csv_path), "--db-path", str(db_path)])
+    assert result.exit_code == 0, result.output
+    assert "Imported 2 card(s)" in result.output
+    # Both land as manual singles (no Full Set tag); 3 total copies.
+    rows = export_lines(db_path, tmp_path)
+    assert len(rows) == 2
+    assert all("Full Set" not in r for r in rows)
+
+
+def test_import_csv_skips_full_set_rows(mock_scryfall, db_path, tmp_path) -> None:
+    csv_path = write_csv(
+        tmp_path,
+        '1,0,"Boseiju, Who Endures",NEO,Near Mint,English,,Full Set: NEO,2',
+    )
+    result = runner.invoke(app, ["import-csv", str(csv_path), "--db-path", str(db_path)])
+    assert result.exit_code == 0, result.output
+    assert "Imported 0 card(s)" in result.output
+    assert "Skipped 1 full-set row" in result.output
+
+
+def test_import_csv_reports_unresolved_but_continues(mock_scryfall, db_path, tmp_path) -> None:
+    csv_path = write_csv(
+        tmp_path,
+        "1,0,Ao the Dawn Sky,NEO,Near Mint,English,,,2",  # resolves
+        "1,0,Phantom,NEO,Near Mint,English,,,9999",  # 404
+    )
+    result = runner.invoke(app, ["import-csv", str(csv_path), "--db-path", str(db_path)])
+    assert result.exit_code == 1  # unresolved rows -> nonzero
+    assert "Imported 1 card(s)" in result.output
+    assert "Unresolved 1 row" in result.output and "NEO 9999" in result.output
+    # The good row still imported despite the bad one.
+    assert len(export_lines(db_path, tmp_path)) == 1
+
+
+def test_import_csv_reports_malformed_rows(mock_scryfall, db_path, tmp_path) -> None:
+    csv_path = write_csv(
+        tmp_path,
+        "1,0,Ao the Dawn Sky,NEO,Near Mint,English,,,2",  # ok
+        "1,0,Nameless,NEO,Near Mint,English,,,",  # missing collector number
+    )
+    result = runner.invoke(app, ["import-csv", str(csv_path), "--db-path", str(db_path)])
+    assert result.exit_code == 1
+    assert "Imported 1 card(s)" in result.output
+    assert "Malformed 1 row" in result.output
+
+
+def test_import_csv_round_trips_manual_singles(mock_scryfall, db_path, tmp_path) -> None:
+    # Add a manual single, export it, then import that CSV into a fresh db.
+    assert (
+        runner.invoke(app, ["add-card", "NEO", "2", "-q", "2", "--db-path", str(db_path)]).exit_code
+        == 0
+    )
+    csv_path = tmp_path / "export.csv"
+    assert (
+        runner.invoke(
+            app, ["export", "moxfield", "--db-path", str(db_path), "-o", str(csv_path)]
+        ).exit_code
+        == 0
+    )
+
+    fresh = tmp_path / "fresh.db"
+    result = runner.invoke(app, ["import-csv", str(csv_path), "--db-path", str(fresh)])
+    assert result.exit_code == 0, result.output
+    assert "Imported 1 card(s) (2 cop" in result.output
+    rows = export_lines(fresh, tmp_path)
+    assert len(rows) == 1 and rows[0].startswith("2,")  # quantity preserved
+
+
+def test_import_csv_missing_file_exits_1(db_path, tmp_path) -> None:
+    result = runner.invoke(
+        app, ["import-csv", str(tmp_path / "nope.csv"), "--db-path", str(db_path)]
+    )
+    assert result.exit_code == 1
+    assert "No such file" in result.output
+
+
 # -- show ------------------------------------------------------------------------
 
 

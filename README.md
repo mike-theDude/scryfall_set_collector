@@ -117,6 +117,20 @@ mtgsets export moxfield      # write exports/moxfield.csv
 Then import `exports/moxfield.csv` into Moxfield via your collection's
 **Import** option.
 
+To go the other way — load a stack of individual cards from a spreadsheet (or a
+Moxfield export) — use `import-csv`. It reads the same columns `export moxfield`
+emits, so a collection round-trips:
+
+```bash
+mtgsets import-csv my-cards.csv   # add each row as a manual single
+```
+
+`Edition` + `Collector Number` identify each printing; `Count`, `Condition`,
+`Language`, and `Foil` populate the entry. Rows tagged `Full Set: <CODE>` are
+skipped (add whole sets with `mtgsets add`), re-importing a printing stacks onto its
+existing quantity, and rows that can't be resolved are reported without aborting the
+run.
+
 ### Commands
 
 | Command | Description |
@@ -133,6 +147,7 @@ Then import `exports/moxfield.csv` into Moxfield via your collection's
 | `mtgsets show <set_code>` | Show one owned set's details and its card-level contents. |
 | `mtgsets stats` | Show collection stats — sets owned vs. the total number of sets. |
 | `mtgsets remove <set_code>` | Remove a set and **only** its generated entries. |
+| `mtgsets import-csv <path>` | Bulk-add cards from a Moxfield-format CSV as manual singles. |
 | `mtgsets export moxfield` | Export the collection as a Moxfield CSV. |
 
 Useful options:
@@ -238,7 +253,7 @@ scryfall_set_collector/
     filters.py      # Inclusion/exclusion rules (single source of truth)
     collection.py   # Set -> card-level entry generation
     stats.py        # Collection statistics (sets owned vs. total)
-    export.py       # Moxfield CSV export
+    export.py       # Moxfield CSV export + import
   data/             # local database (gitignored)
   exports/          # generated CSVs (gitignored)
   docs/DESIGN.md    # canonical schema / filter / export spec
@@ -271,6 +286,6 @@ test suite makes no network calls — the Scryfall API is mocked.
 ## Roadmap
 
 The initial CLI is complete: `init`, `search`, `preview`, `add`, `add-card`,
-`refresh`, `list`, `show`, `stats`, `remove`, `remove-card`, and `export moxfield`.
-Planned next: `import-csv` and `check-deck` (compare a decklist against your
+`refresh`, `list`, `show`, `stats`, `remove`, `remove-card`, `import-csv`, and
+`export moxfield`. Planned next: `check-deck` (compare a decklist against your
 collection). Feature work is tracked as GitHub issues.

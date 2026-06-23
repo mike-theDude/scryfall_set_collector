@@ -403,6 +403,114 @@ def remove_card(
     )
 
 
+@app.command(name="import-csv")
+def import_csv(
+    path: Path = typer.Argument(..., help="Path to a Moxfield-format CSV."),
+    db_path: Path = typer.Option(db.DB_PATH, "--db-path", help="Database file location."),
+) -> None:
+    """Bulk-add individual cards from a Moxfield-format CSV as manual singles.
+
+    Reads the same columns ``export moxfield`` emits, so a collection round-trips.
+    Each row is added as a ``manual`` single (Edition + Collector Number identify the
+    printing). ``Full Set:``-tagged rows are skipped — re-add whole sets with
+    ``mtgsets add``. Re-importing a printing stacks onto its existing manual quantity.
+    Unresolvable or malformed rows are reported but never abort the run.
+    """
+    if not path.exists():
+        console.print(f"[red]No such file:[/red] [bold]{path}[/bold]")
+        raise typer.Exit(1)
+
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError as exc:
+        console.print(f"[red]Could not read[/red] [bold]{path}[/bold]: {exc}")
+        raise typer.Exit(1) from exc
+
+    rows = export.parse_moxfield_csv(lines)
+    if not rows:
+        console.print(f"[yellow]No card rows found[/yellow] in [bold]{path}[/bold].")
+        raise typer.Exit(1)
+
+    added_rows = 0
+    added_qty = 0
+    skipped_full_set = 0
+    malformed: list[export.ImportRow] = []
+    unresolved: list[export.ImportRow] = []
+    cache: dict[tuple[str, str], dict | None] = {}
+
+    db.init_db(db_path)
+    conn = db.get_connection(db_path)
+    try:
+        with scryfall.ScryfallClient() as client:
+            for r in rows:
+                if r.error:
+                    malformed.append(r)
+                    continue
+                if r.is_full_set:
+                    skipped_full_set += 1
+                    continue
+
+                key = (r.edition, r.collector_number)
+                if key not in cache:
+                    try:
+                        cache[key] = client.get_card(r.edition, r.collector_number)
+                    except scryfall.ScryfallError:
+                        cache[key] = None
+                card = cache[key]
+                if card is None:
+                    unresolved.append(r)
+                    continue
+
+                try:
+                    db.upsert_cards(conn, [card])
+                    db.add_manual_entry(
+                        conn,
+                        scryfall_id=card["id"],
+                        set_code=(card.get("set") or r.edition),
+                        quantity=r.quantity,
+                        condition=r.condition,
+                        language=r.language,
+                        foil=r.foil,
+                    )
+                    conn.commit()
+                except Exception:
+                    conn.rollback()
+                    unresolved.append(r)
+                    continue
+                added_rows += 1
+                added_qty += r.quantity
+    finally:
+        conn.close()
+
+    console.print(
+        f"\n[green]Imported[/green] [green]{added_rows}[/green] card(s) "
+        f"([green]{added_qty}[/green] cop(y/ies)) as manual singles."
+    )
+    if skipped_full_set:
+        console.print(
+            f"  [dim]Skipped {skipped_full_set} full-set row(s) — add whole sets with "
+            "[bold]mtgsets add[/bold].[/dim]"
+        )
+    if unresolved:
+        console.print(
+            f"  [yellow]Unresolved {len(unresolved)} row(s)[/yellow] (set/number not found):"
+        )
+        for r in unresolved[:10]:
+            console.print(f"    [dim]line {r.line}:[/dim] {r.edition.upper()} {r.collector_number}")
+        if len(unresolved) > 10:
+            console.print(f"    [dim]…and {len(unresolved) - 10} more[/dim]")
+    if malformed:
+        lines_str = ", ".join(str(r.line) for r in malformed[:10])
+        more = f" …(+{len(malformed) - 10})" if len(malformed) > 10 else ""
+        console.print(
+            f"  [yellow]Malformed {len(malformed)} row(s)[/yellow] "
+            f"(missing Edition/Collector Number) — line(s) {lines_str}{more}"
+        )
+
+    if unresolved or malformed:
+        raise typer.Exit(1)
+
+
 @app.command()
 def refresh(
     set_code: str = typer.Argument(..., help="Set code, e.g. NEO."),
