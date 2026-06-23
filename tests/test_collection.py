@@ -39,6 +39,19 @@ def test_build_breakdown_partitions_neo(neo_cards) -> None:
     assert all(len(cards) == 1 for cards in breakdown.excluded.values())
 
 
+def test_build_breakdown_booster_false_set(booster_false_sets) -> None:
+    # A set where every printing is booster=False (SOS/TMT, issue #50): the
+    # membership gate is skipped, so main cards/basics are included and only the
+    # treatment variants (borderless, foil-only surgefoil) are excluded.
+    breakdown = collection.build_breakdown(booster_false_sets)
+    included = {c["name"] for c in breakdown.included}
+    assert included == {"The Dawning Archaic", "Forest", "Action News Crew"}
+    assert set(breakdown.excluded) == {filters.REASON_VARIANT}
+    assert breakdown.excluded_count == 2
+    # The old unconditional booster gate would have excluded everything.
+    assert breakdown.included_count == 3
+
+
 def test_build_breakdown_included_matches_filter(all_sample_cards) -> None:
     breakdown = collection.build_breakdown(all_sample_cards)
     expected = [c for c in all_sample_cards if filters.is_main_set_card(c)]

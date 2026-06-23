@@ -109,10 +109,15 @@ def build_breakdown(cards: list[dict[str, Any]]) -> SetBreakdown:
 
     Pure function over the filter rules in :mod:`mtgsets.filters`; performs no I/O
     so both `preview` and `add` can rely on it.
+
+    The ``booster`` membership gate is set-relative: it only applies when the set has
+    booster cards at all, so it is computed once here over the whole printing list and
+    passed down (see ``filters.set_uses_booster`` and issue #50).
     """
+    set_has_booster = filters.set_uses_booster(cards)
     breakdown = SetBreakdown()
     for card in cards:
-        reason = filters.exclusion_reason(card)
+        reason = filters.exclusion_reason(card, set_has_booster=set_has_booster)
         if reason is None:
             breakdown.included.append(card)
         else:

@@ -1,0 +1,140 @@
+[
+  {
+    "id": "7a451985-37e1-44d8-839b-dc1e88df5c96",
+    "name": "The Dawning Archaic",
+    "set": "sos",
+    "collector_number": "1",
+    "rarity": "mythic",
+    "lang": "en",
+    "games": [
+      "paper",
+      "mtgo",
+      "arena"
+    ],
+    "digital": false,
+    "layout": "normal",
+    "oversized": false,
+    "promo": false,
+    "border_color": "black",
+    "frame_effects": [
+      "legendary"
+    ],
+    "finishes": [
+      "nonfoil",
+      "foil"
+    ],
+    "variation": false,
+    "booster": false,
+    "type_line": "Legendary Creature \u2014 Avatar"
+  },
+  {
+    "id": "f169dfb2-e4c8-46e9-8591-e51bb82da082",
+    "name": "Forest",
+    "set": "sos",
+    "collector_number": "280",
+    "rarity": "common",
+    "lang": "en",
+    "games": [
+      "paper",
+      "mtgo",
+      "arena"
+    ],
+    "digital": false,
+    "layout": "normal",
+    "oversized": false,
+    "promo": false,
+    "border_color": "black",
+    "finishes": [
+      "nonfoil",
+      "foil"
+    ],
+    "variation": false,
+    "booster": false,
+    "type_line": "Basic Land \u2014 Forest"
+  },
+  {
+    "id": "df4fa3ab-30e3-4e82-a8b8-4fbaeab7870b",
+    "name": "Blech, Loafing Pest",
+    "set": "sos",
+    "collector_number": "298",
+    "rarity": "rare",
+    "lang": "en",
+    "games": [
+      "paper",
+      "mtgo"
+    ],
+    "digital": false,
+    "layout": "normal",
+    "oversized": false,
+    "promo": false,
+    "border_color": "borderless",
+    "frame_effects": [
+      "legendary",
+      "inverted",
+      "showcase"
+    ],
+    "finishes": [
+      "nonfoil",
+      "foil"
+    ],
+    "variation": false,
+    "booster": false,
+    "type_line": "Legendary Creature \u2014 Pest"
+  },
+  {
+    "id": "bc0f5ca8-47bd-4451-8fd1-a312ff7d31ec",
+    "name": "Action News Crew",
+    "set": "tmt",
+    "collector_number": "1",
+    "rarity": "common",
+    "lang": "en",
+    "games": [
+      "paper",
+      "arena",
+      "mtgo"
+    ],
+    "digital": false,
+    "layout": "normal",
+    "oversized": false,
+    "promo": false,
+    "promo_types": [
+      "universesbeyond"
+    ],
+    "border_color": "black",
+    "finishes": [
+      "nonfoil",
+      "foil"
+    ],
+    "variation": false,
+    "booster": false,
+    "type_line": "Creature \u2014 Human Citizen"
+  },
+  {
+    "id": "5c2812cb-4fce-4ec0-a2d5-88ef4e34d5ef",
+    "name": "Plains",
+    "set": "tmt",
+    "collector_number": "305",
+    "rarity": "common",
+    "lang": "en",
+    "games": [
+      "paper",
+      "arena",
+      "mtgo"
+    ],
+    "digital": false,
+    "layout": "normal",
+    "oversized": false,
+    "promo": false,
+    "promo_types": [
+      "surgefoil",
+      "universesbeyond"
+    ],
+    "border_color": "black",
+    "finishes": [
+      "foil"
+    ],
+    "variation": false,
+    "booster": false,
+    "type_line": "Basic Land \u2014 Plains"
+  }
+]

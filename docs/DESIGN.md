@@ -57,16 +57,28 @@ Exclusion checks, in priority order:
 5. **Promos** — `promo == true`.
 6. **Borderless / showcase / extended-art variants** — `border_color ==
    "borderless"`, a `frame_effects` of `showcase`/`extendedart`/`inverted`,
-   `promo_types` containing `boosterfun`, or an etched-only `finishes`.
+   `promo_types` containing `boosterfun`, or a `finishes` lacking `nonfoil`
+   (foil-only / etched-only collector printings).
 7. **Alternate printing / variation** — `variation == true`.
-8. **Not in the regular set** — `booster != true`. This is the membership gate that
-   removes deck-exclusive / Jumpstart / promo-only extras carrying no other marker.
+8. **Not in the regular set** — `booster != true`, **but only when the set has any
+   `booster == true` printing at all** (`filters.set_uses_booster`). This is the
+   membership gate that removes deck-exclusive / Jumpstart / promo-only extras
+   carrying no other marker. It is skipped for sets where *every* printing is
+   `booster == false` (see tuning notes), so the gate is evaluated per-set, not
+   per-card in isolation.
 
-**Tuning notes** (validated live against NEO → 292 cards and MOM → 291 cards):
+**Tuning notes** (validated live against NEO → 292, MOM → 291, SOS → 281, TMT → 205):
 
-- `booster == true` is the reliable main-set membership signal, and already excludes
-  every `boosterfun` collector treatment. Cards like MOM #323–337 are plain `normal`
-  printings distinguishable only by `booster == false`.
+- `booster == true` separates the regular set from deck-exclusive extras and already
+  excludes every `boosterfun` collector treatment. Cards like MOM #323–337 are plain
+  `normal` printings distinguishable only by `booster == false`.
+- The `booster` flag is **only meaningful when the set actually uses it.** Some recent
+  sets (Secrets of Strixhaven `SOS`, Teenage Mutant Ninja Turtles `TMT`) mark *every*
+  printing `booster == false`; applying the gate unconditionally filtered them to zero
+  cards (issue #50). So check 8 fires only when `set_uses_booster` is true for the set.
+- A `finishes` without `nonfoil` (foil-only or etched-only) marks a collector treatment,
+  not a regular card — e.g. TMT's surgefoil basics `#305–314`. The regular set always
+  has a nonfoil copy, so these are excluded at check 6.
 - Most `frame_effects` are **intrinsic** to the regular printing and must NOT be
   treated as variants: `legendary`, `enchantment`, `fandfc`, `fullart`, etc. Only
   `showcase`, `extendedart`, `inverted` mark alternate treatments.

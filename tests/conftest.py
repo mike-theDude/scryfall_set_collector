@@ -37,6 +37,17 @@ def exclusion_samples() -> list[dict]:
 
 
 @pytest.fixture(scope="session")
+def booster_false_sets() -> list[dict]:
+    """Real cards from sets where *every* printing is ``booster == false``.
+
+    SOS (Secrets of Strixhaven) and TMT (Teenage Mutant Ninja Turtles): main cards
+    and a basic that must be included despite ``booster == false``, plus a borderless
+    variant and a surgefoil foil-only basic that must still be excluded. See issue #50.
+    """
+    return load_fixture("booster_false_sets")
+
+
+@pytest.fixture(scope="session")
 def all_sample_cards(neo_cards, exclusion_samples) -> list[dict]:
     """Every fixture card — NEO subset plus the cross-set exclusion samples."""
     return [*neo_cards, *exclusion_samples]

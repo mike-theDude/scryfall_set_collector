@@ -116,6 +116,7 @@ ALT_TREATMENT_TRUE = [
     ("inverted frame", {"frame_effects": ["inverted"]}),
     ("boosterfun promo type", {"promo_types": ["boosterfun"]}),
     ("etched-only finish", {"finishes": ["etched"]}),
+    ("foil-only finish", {"finishes": ["foil"]}),  # TMT surgefoil basics (#50)
 ]
 
 
@@ -137,6 +138,7 @@ ALT_TREATMENT_FALSE = [
     ("intrinsic legendary frame", {"frame_effects": ["legendary"]}),
     ("normal finishes", {"finishes": ["nonfoil", "foil"]}),
     ("etched among others", {"finishes": ["nonfoil", "etched"]}),
+    ("missing finishes", {"finishes": None}),  # absent field must not exclude
     ("non-boosterfun promo type", {"promo_types": ["bundle"]}),
 ]
 
@@ -192,3 +194,45 @@ def test_neo_fixture_split(neo_cards) -> None:
     assert len(included) == 4  # plain, legendary, fandfc/enchantment DFC, basic
     assert len(excluded) == 3  # non-English, variant, promo
     assert len(neo_cards) == 7
+
+
+# -- booster-false sets: the membership gate is set-relative (issue #50) ----------
+
+
+def test_set_uses_booster_true_when_any_booster() -> None:
+    cards = [base_card(booster=False), base_card(booster=True)]
+    assert filters.set_uses_booster(cards) is True
+
+
+def test_set_uses_booster_false_when_none() -> None:
+    cards = [base_card(booster=False), base_card(booster=False)]
+    assert filters.set_uses_booster(cards) is False
+
+
+def test_booster_gate_applies_when_set_uses_booster() -> None:
+    # A plain booster=False card is "not in set" only because the set has booster cards.
+    card = base_card(booster=False)
+    assert filters.exclusion_reason(card, set_has_booster=True) == filters.REASON_NOT_IN_SET
+    assert filters.exclusion_reason(card, set_has_booster=False) is None
+
+
+def test_booster_gate_default_is_strict() -> None:
+    # Default keeps the historical single-card behaviour: the gate is applied.
+    assert filters.exclusion_reason(base_card(booster=False)) == filters.REASON_NOT_IN_SET
+
+
+def test_booster_false_set_includes_main_cards(booster_false_sets) -> None:
+    # SOS/TMT main cards and basics are booster=False but belong to the set.
+    for name in ("The Dawning Archaic", "Forest", "Action News Crew"):
+        card = card_by_name(booster_false_sets, name)
+        assert card.get("booster") is False, f"{name} fixture should be booster=False"
+        assert filters.is_main_set_card(card, set_has_booster=False) is True
+
+
+def test_booster_false_set_still_excludes_variants(booster_false_sets) -> None:
+    # Even with the membership gate skipped, treatment rules still remove variants.
+    borderless = card_by_name(booster_false_sets, "Blech, Loafing Pest")
+    assert filters.exclusion_reason(borderless, set_has_booster=False) == filters.REASON_VARIANT
+    surgefoil = card_by_name(booster_false_sets, "Plains")  # TMT #305, finishes=['foil']
+    assert surgefoil.get("finishes") == ["foil"]
+    assert filters.exclusion_reason(surgefoil, set_has_booster=False) == filters.REASON_VARIANT
