@@ -192,6 +192,49 @@ def test_progress_owns_latest_is_zero_behind() -> None:
     assert p.sets_behind == 0
 
 
+# == per-year breakdown (issue #55) ==============================================
+
+
+def test_year_splits_owned_and_missing_core_expansion() -> None:
+    # 2022 has neo + snc; owning only neo leaves snc missing.
+    y = stats.build_year_stats(["neo"], ALL_SETS, RELEASES, "2022")
+    assert y.year == "2022"
+    assert [r.code for r in y.owned] == ["neo"]
+    assert [r.code for r in y.missing] == ["snc"]
+    assert y.total == 2
+    assert y.pct == 50.0
+
+
+def test_year_orders_chronologically() -> None:
+    # Own nothing in 2022 -> both sets missing, oldest (neo, Feb) before snc (Apr).
+    y = stats.build_year_stats([], ALL_SETS, RELEASES, "2022")
+    assert [r.code for r in y.missing] == ["neo", "snc"]
+    assert y.owned == []
+    assert y.pct == 0.0
+
+
+def test_year_surfaces_owned_other_sets_separately() -> None:
+    # cmd is a 2023 Commander deck (outside core/expansion): owned, but listed as
+    # "other" rather than counting toward the year's owned/missing totals.
+    y = stats.build_year_stats(["mom", "cmd"], ALL_SETS, RELEASES, "2023")
+    assert [r.code for r in y.owned] == ["mom"]
+    assert y.missing == []
+    assert [r.code for r in y.owned_other] == ["cmd"]
+    assert y.total == 1  # cmd not counted in the core/expansion total
+
+
+def test_year_case_insensitive_codes() -> None:
+    y = stats.build_year_stats(["NEO"], ALL_SETS, RELEASES, "2022")
+    assert [r.code for r in y.owned] == ["neo"]
+
+
+def test_year_with_no_releases_has_no_total() -> None:
+    y = stats.build_year_stats(["neo"], ALL_SETS, RELEASES, "1999")
+    assert y.total == 0
+    assert y.pct is None
+    assert y.owned == [] and y.missing == []
+
+
 # == value (issue #53) ===========================================================
 
 
