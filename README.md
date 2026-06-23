@@ -133,15 +133,34 @@ Then import `exports/moxfield.csv` into Moxfield via your collection's
 Useful options:
 
 - `--db-path PATH` — use an alternate database file (all DB commands).
-- `mtgsets stats --no-remote` — skip Scryfall and omit the total-sets comparison.
 - `mtgsets remove <set> --yes` / `-y` — skip the confirmation prompt.
 - `mtgsets export moxfield --output PATH` / `-o PATH` — write the CSV elsewhere
   (default `exports/moxfield.csv`).
 
-`stats` compares owned sets against the count of **core/expansion** releases on
-Scryfall (the numbered Standard sets — Commander decks, Masters reprints, tokens,
-promos, and digital-only sets are not part of that denominator). Sets you own that
-fall outside core/expansion are still counted and listed separately.
+#### `mtgsets stats`
+
+The default output is compact: sets owned vs. the total number of sets, plus the
+generated card-entry count. "Total sets" is the count of **core/expansion** releases
+on Scryfall (the numbered Standard sets — Commander decks, Masters reprints, tokens,
+promos, and digital-only sets are excluded). Sets you own outside core/expansion are
+still counted and listed separately.
+
+Add flags for deeper breakdowns (or `--all` for everything):
+
+| Flag | Adds |
+|---|---|
+| `--rarity` | Owned counts by rarity (common/uncommon/rare/mythic). |
+| `--colors` | Owned counts by color identity (WUBRG + multicolor + colorless). |
+| `--types` | Owned counts by primary card type (creature/instant/land/…). |
+| `--curve` | Mana-value curve of owned nonland cards. |
+| `--progress` | Newest/oldest set owned, sets behind the latest release, coverage by year, and sets added over time. |
+| `--value` | Estimated collection value from **live** Scryfall prices, with top cards and sets. |
+| `--all` | Show every section above. |
+| `--no-remote` | Skip Scryfall entirely — composition sections still work; the total-sets, `--progress`, and `--value` sections are omitted. |
+
+`--rarity`, `--colors`, `--types`, and `--curve` read the locally cached card data
+(no network). `--progress` uses the Scryfall set list, and `--value` re-fetches
+current prices, so both need a connection.
 
 ### Example: preview
 
