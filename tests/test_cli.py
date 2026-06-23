@@ -311,9 +311,7 @@ def test_stats_all_runs_every_section(mock_scryfall, db_path) -> None:
 
 def test_stats_value_skipped_with_no_remote(mock_scryfall, db_path) -> None:
     assert add_neo(db_path).exit_code == 0
-    result = runner.invoke(
-        app, ["stats", "--value", "--no-remote", "--db-path", str(db_path)]
-    )
+    result = runner.invoke(app, ["stats", "--value", "--no-remote", "--db-path", str(db_path)])
     assert result.exit_code == 0, result.output
     assert "needs live Scryfall prices" in result.output
     assert "Fetching current prices" not in result.output
@@ -321,8 +319,6 @@ def test_stats_value_skipped_with_no_remote(mock_scryfall, db_path) -> None:
 
 def test_stats_progress_skipped_with_no_remote(mock_scryfall, db_path) -> None:
     assert add_neo(db_path).exit_code == 0
-    result = runner.invoke(
-        app, ["stats", "--progress", "--no-remote", "--db-path", str(db_path)]
-    )
+    result = runner.invoke(app, ["stats", "--progress", "--no-remote", "--db-path", str(db_path)])
     assert result.exit_code == 0, result.output
     assert "needs Scryfall" in result.output

@@ -344,9 +344,7 @@ def _print_breakdown(title: str, pairs: list[tuple[str, int]]) -> None:
         console.print(f"  {label:<{width}}  [green]{count}[/green]")
 
 
-def _fetch_live_prices(
-    client: scryfall.ScryfallClient, set_codes: set[str]
-) -> dict[str, dict]:
+def _fetch_live_prices(client: scryfall.ScryfallClient, set_codes: set[str]) -> dict[str, dict]:
     """Map ``scryfall_id -> current card object`` for the given owned sets."""
     fresh: dict[str, dict] = {}
     for code in sorted(set_codes):
@@ -372,8 +370,7 @@ def _print_progress(p: stats.ProgressStats) -> None:
     elif p.sets_behind is not None:
         latest = f" (latest {p.latest_release.code.upper()})" if p.latest_release else ""
         console.print(
-            f"  Sets behind    [yellow]{p.sets_behind}[/yellow] "
-            f"core/expansion release(s){latest}"
+            f"  Sets behind    [yellow]{p.sets_behind}[/yellow] core/expansion release(s){latest}"
         )
     console.print(
         f"  Added         {p.added_last_30} in 30d · {p.added_last_90} in 90d · "
