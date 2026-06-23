@@ -287,5 +287,10 @@ test suite makes no network calls — the Scryfall API is mocked.
 
 The initial CLI is complete: `init`, `search`, `preview`, `add`, `add-card`,
 `refresh`, `list`, `show`, `stats`, `remove`, `remove-card`, `import-csv`, and
-`export moxfield`. Planned next: `check-deck` (compare a decklist against your
-collection). Feature work is tracked as GitHub issues.
+`export moxfield`. Feature work is tracked as GitHub issues.
+
+## License
+
+Released under the [MIT License](LICENSE) — free to use, modify, and distribute,
+including in commercial and proprietary projects, provided the copyright and license
+notice are retained.
