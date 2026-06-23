@@ -155,14 +155,14 @@ Add flags for deeper breakdowns (or `--all` for everything):
 | `--curve` | Mana-value curve of owned nonland cards. |
 | `--progress` | Newest/oldest set owned, sets behind the latest release, coverage by year, and sets added over time. |
 | `--year <YYYY>` | List the core/expansion sets you **own** vs. those you're **missing** from that release year, with an owned/total count. Only sets released as of today count; ones due later in the year are listed separately as **Upcoming**. |
-| `--value` | Estimated collection value from **live** Scryfall prices, with top cards and sets. |
+| `--value` | Estimated collection value from **cached** Scryfall prices, with top cards and sets. |
 | `--all` | Show every section above. |
-| `--no-remote` | Skip Scryfall entirely — composition sections still work; the total-sets, `--progress`, and `--value` sections are omitted. |
+| `--no-remote` | Skip Scryfall entirely — composition and `--value` still work; the total-sets, `--progress`, and `--year` sections are omitted. |
 
-`--rarity`, `--colors`, `--types`, and `--curve` read the locally cached card data
-(no network). `--progress` and `--year` use the Scryfall set list, and `--value`
-re-fetches current prices, so they need a connection (and are skipped under
-`--no-remote`).
+`--rarity`, `--colors`, `--types`, `--curve`, and `--value` read the locally cached
+card data (no network). `--value` uses the prices stored when each set was added, so
+it works offline but is only as fresh as that snapshot. `--progress` and `--year` use
+the Scryfall set list, so they need a connection (and are skipped under `--no-remote`).
 
 ```
 $ mtgsets stats --year 2026

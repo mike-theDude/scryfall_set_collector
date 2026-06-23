@@ -344,15 +344,6 @@ def _print_breakdown(title: str, pairs: list[tuple[str, int]]) -> None:
         console.print(f"  {label:<{width}}  [green]{count}[/green]")
 
 
-def _fetch_live_prices(client: scryfall.ScryfallClient, set_codes: set[str]) -> dict[str, dict]:
-    """Map ``scryfall_id -> current card object`` for the given owned sets."""
-    fresh: dict[str, dict] = {}
-    for code in sorted(set_codes):
-        for card in client.get_set_cards(code):
-            fresh[card["id"]] = card
-    return fresh
-
-
 def _print_progress(p: stats.ProgressStats) -> None:
     console.print("\n[bold]Progress[/bold]")
     if p.newest_owned and p.newest_owned.released_at:
@@ -421,7 +412,7 @@ def _print_year(y: stats.YearStats) -> None:
 def _print_value(v: stats.ValueStats) -> None:
     console.print(
         f"\n[bold]Estimated value[/bold]  [green]${v.total_usd:,.2f}[/green]  "
-        "[dim](live USD prices)[/dim]"
+        "[dim](cached USD prices, as of when each set was added)[/dim]"
     )
     if v.unpriced_count:
         console.print(f"  [dim]{v.unpriced_count} card(s) had no USD price[/dim]")
@@ -439,7 +430,7 @@ def _print_value(v: stats.ValueStats) -> None:
 def stats_command(
     db_path: Path = typer.Option(db.DB_PATH, "--db-path", help="Database file location."),
     no_remote: bool = typer.Option(
-        False, "--no-remote", help="Skip Scryfall; omit the total-sets/progress/value sections."
+        False, "--no-remote", help="Skip Scryfall; omit the total-sets/progress/year sections."
     ),
     rarity: bool = typer.Option(False, "--rarity", help="Break down owned cards by rarity."),
     colors: bool = typer.Option(False, "--colors", help="Break down owned cards by color."),
@@ -449,7 +440,7 @@ def stats_command(
         False, "--progress", help="Show release-timeline progress (needs Scryfall)."
     ),
     value: bool = typer.Option(
-        False, "--value", help="Estimate collection value from live Scryfall prices."
+        False, "--value", help="Estimate collection value from cached Scryfall prices."
     ),
     year: int | None = typer.Option(
         None, "--year", help="List owned vs. missing core/expansion sets from a release year."
@@ -483,22 +474,14 @@ def stats_command(
     owned_added = [(r["set_code"], r["added_at"]) for r in rows]
     card_entries = sum(r["entry_count"] for r in rows)
 
-    # Decide which network calls are needed, then make them in one client session.
+    # The only networked section left is the Scryfall set list (sets-owned total,
+    # --progress, --year). Value reads cached prices from the db, so no fetch here.
     # --no-remote is authoritative: it suppresses every networked section.
-    want_sets = not no_remote
-    want_prices = value and not no_remote and bool(owned_cards)
     all_sets: list[dict] | None = None
-    live_prices: dict[str, dict] | None = None
-    if want_sets or want_prices:
+    if not no_remote:
         try:
             with scryfall.ScryfallClient() as client:
-                if want_sets:
-                    all_sets = client.get_sets()
-                if want_prices:
-                    console.print("[dim]Fetching current prices…[/dim]")
-                    live_prices = _fetch_live_prices(
-                        client, {(c.get("set") or "") for _, c in owned_cards}
-                    )
+                all_sets = client.get_sets()
         except scryfall.ScryfallError as exc:
             console.print(
                 f"[yellow]Note:[/yellow] could not reach Scryfall ({exc}); "
@@ -576,17 +559,9 @@ def stats_command(
             )
 
     # -- value section -----------------------------------------------------
+    # Uses the prices cached in the db (no network), so it works offline too.
     if value:
-        if no_remote:
-            console.print(
-                "\n[yellow]Value[/yellow] needs live Scryfall prices; skipped "
-                "([bold]--no-remote[/bold])."
-            )
-        elif live_prices is None:
-            console.print("\n[yellow]Value[/yellow] skipped — could not fetch current prices.")
-        else:
-            priced = [(qty, live_prices.get(c["id"], c)) for qty, c in owned_cards]
-            _print_value(stats.build_value(priced))
+        _print_value(stats.build_value(owned_cards))
 
 
 @app.command()
