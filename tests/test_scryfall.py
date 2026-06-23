@@ -11,7 +11,7 @@ import httpx
 import pytest
 
 from mtgsets import scryfall
-from mtgsets.scryfall import ScryfallClient, ScryfallError, match_sets
+from mtgsets.scryfall import ScryfallClient, ScryfallError, match_sets, release_sets
 
 
 @pytest.fixture(autouse=True)
@@ -33,6 +33,23 @@ SETS = [
     {"code": "one", "name": "Phyrexia: All Will Be One", "released_at": "2023-02-10"},
     {"code": "und", "name": "Undated Set", "released_at": None},
 ]
+
+
+# -- release_sets (pure, issue #12) ----------------------------------------------
+
+RELEASE_CANDIDATES = [
+    {"code": "neo", "set_type": "expansion", "digital": False},
+    {"code": "m21", "set_type": "core", "digital": False},
+    {"code": "cmd", "set_type": "commander", "digital": False},  # not a release
+    {"code": "tneo", "set_type": "token", "digital": False},  # not a release
+    {"code": "ydmu", "set_type": "expansion", "digital": True},  # digital, excluded
+    {"code": "blb", "set_type": "expansion"},  # digital key absent -> paper
+]
+
+
+def test_release_sets_keeps_paper_core_and_expansion() -> None:
+    codes = [s["code"] for s in release_sets(RELEASE_CANDIDATES)]
+    assert codes == ["neo", "m21", "blb"]
 
 
 def test_match_sets_by_code_case_insensitive() -> None:

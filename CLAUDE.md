@@ -58,6 +58,7 @@ mtgsets/
   scryfall.py     # Scryfall API client
   filters.py      # inclusion/exclusion rules — single source of truth
   collection.py   # set -> card-level entry generation
+  stats.py        # collection statistics (sets owned vs. total)
   export.py       # Moxfield CSV export
 data/collection.db  # local db (gitignored)
 exports/            # generated CSVs (gitignored)

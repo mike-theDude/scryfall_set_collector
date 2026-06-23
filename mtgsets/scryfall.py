@@ -117,6 +117,23 @@ class ScryfallClient:
             raise
 
 
+#: ``set_type`` values that count as a collectible "release" — the numbered core
+#: and expansion sets this app is built around. Commander/Masters/duel decks,
+#: tokens, promos, memorabilia, and digital-only (Alchemy) sets are excluded so the
+#: "sets owned vs. total" denominator (issue #12) matches what people mean by "a set".
+RELEASE_SET_TYPES = frozenset({"core", "expansion"})
+
+
+def is_release_set(set_obj: dict[str, Any]) -> bool:
+    """True if a Scryfall set object is a paper core/expansion release."""
+    return not set_obj.get("digital") and set_obj.get("set_type") in RELEASE_SET_TYPES
+
+
+def release_sets(sets: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Filter a Scryfall set list to paper core/expansion releases (see #12)."""
+    return [s for s in sets if is_release_set(s)]
+
+
 def match_sets(sets: list[dict[str, Any]], query: str) -> list[dict[str, Any]]:
     """Filter sets whose code or name contains ``query`` (case-insensitive).
 

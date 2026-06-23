@@ -16,7 +16,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from . import collection, db, export, scryfall
+from . import collection, db, export, scryfall, stats
 
 app = typer.Typer(
     name="mtgsets",
@@ -331,6 +331,69 @@ def list_sets(
     console.print(
         f"[green]{len(rows)}[/green] set(s), [green]{total_entries}[/green] generated card entries."
     )
+
+
+@app.command(name="stats")
+def stats_command(
+    db_path: Path = typer.Option(db.DB_PATH, "--db-path", help="Database file location."),
+    no_remote: bool = typer.Option(
+        False, "--no-remote", help="Skip Scryfall; omit the total-sets comparison."
+    ),
+) -> None:
+    """Show collection statistics — sets owned vs. the total number of sets."""
+    if not Path(db_path).exists():
+        console.print(
+            "No collection database yet. Run [bold]mtgsets init[/bold] and "
+            "[bold]mtgsets add <set>[/bold] first."
+        )
+        raise typer.Exit(1)
+
+    conn = db.get_connection(db_path)
+    try:
+        rows = db.list_owned_sets(conn)
+    finally:
+        conn.close()
+
+    owned_codes = [r["set_code"] for r in rows]
+    card_entries = sum(r["entry_count"] for r in rows)
+
+    # The total-sets denominator needs the live Scryfall set list; degrade gracefully
+    # (still report owned totals) when it's unavailable or explicitly skipped.
+    release_codes: list[str] | None = None
+    if not no_remote:
+        try:
+            with scryfall.ScryfallClient() as client:
+                release_codes = [s["code"] for s in scryfall.release_sets(client.get_sets())]
+        except scryfall.ScryfallError as exc:
+            console.print(
+                f"[yellow]Note:[/yellow] could not reach Scryfall for the total set "
+                f"count ({exc}); showing owned totals only."
+            )
+
+    s = stats.build_stats(owned_codes, card_entries, release_codes)
+
+    console.print("\n[bold]Collection stats[/bold]\n")
+    if s.release_total is not None:
+        pct = s.release_pct
+        console.print(
+            f"  Sets owned      [green]{s.owned_release}[/green] / "
+            f"[bold]{s.release_total}[/bold] core+expansion"
+            + (f"  [dim]({pct:.1f}%)[/dim]" if pct is not None else "")
+        )
+        if s.owned_other:
+            console.print(
+                f"  Other sets owned [green]{s.owned_other}[/green]  "
+                "[dim](Commander, Masters, etc. — outside core/expansion)[/dim]"
+            )
+    else:
+        console.print(f"  Sets owned      [green]{s.owned_total}[/green]")
+
+    console.print(f"  Card entries    [green]{card_entries}[/green]")
+
+    if not s.owned_total:
+        console.print(
+            "\n[dim]No sets owned yet. Add one with [bold]mtgsets add <set>[/bold].[/dim]"
+        )
 
 
 @app.command()

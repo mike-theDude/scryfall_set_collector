@@ -19,8 +19,18 @@ from mtgsets.scryfall import ScryfallClient
 
 runner = CliRunner()
 
-NEO_SET = {"code": "neo", "name": "Kamigawa: Neon Dynasty"}
-MOM_SET = {"code": "mom", "name": "March of the Machine"}
+NEO_SET = {
+    "code": "neo",
+    "name": "Kamigawa: Neon Dynasty",
+    "set_type": "expansion",
+    "digital": False,
+}
+MOM_SET = {
+    "code": "mom",
+    "name": "March of the Machine",
+    "set_type": "expansion",
+    "digital": False,
+}
 
 
 @pytest.fixture
@@ -226,3 +236,46 @@ def test_search_lists_matches(mock_scryfall) -> None:
     result = runner.invoke(app, ["search", "neo"])
     assert result.exit_code == 0, result.output
     assert "NEO" in result.output
+
+
+# -- stats -----------------------------------------------------------------------
+
+
+def test_stats_shows_owned_vs_total(mock_scryfall, db_path) -> None:
+    # NEO owned; the /sets mock knows two core/expansion sets (NEO, MOM).
+    assert add_neo(db_path).exit_code == 0
+    result = runner.invoke(app, ["stats", "--db-path", str(db_path)])
+    assert result.exit_code == 0, result.output
+    assert "Sets owned" in result.output
+    assert "1 / 2 core+expansion" in result.output
+    assert "(50.0%)" in result.output
+    # NEO generates 4 card entries from the fixture (plain, legendary, DFC, basic).
+    assert "Card entries" in result.output and "4" in result.output
+
+
+def test_stats_no_remote_omits_total(mock_scryfall, db_path) -> None:
+    assert add_neo(db_path).exit_code == 0
+    result = runner.invoke(app, ["stats", "--no-remote", "--db-path", str(db_path)])
+    assert result.exit_code == 0, result.output
+    assert "Sets owned" in result.output
+    assert "core+expansion" not in result.output  # no denominator without Scryfall
+
+
+def test_stats_requires_database(db_path) -> None:
+    result = runner.invoke(app, ["stats", "--db-path", str(db_path)])
+    assert result.exit_code == 1
+    assert "No collection database yet" in result.output
+
+
+def test_stats_degrades_when_scryfall_unreachable(monkeypatch, db_path) -> None:
+    # DB present (init), but Scryfall errors: owned totals still print, no denominator.
+    runner.invoke(app, ["init", "--db-path", str(db_path)])
+
+    def boom(*a, **k):
+        raise scryfall.ScryfallError("network down")
+
+    monkeypatch.setattr(scryfall.ScryfallClient, "get_sets", boom)
+    result = runner.invoke(app, ["stats", "--db-path", str(db_path)])
+    assert result.exit_code == 0, result.output
+    assert "could not reach Scryfall" in result.output
+    assert "Sets owned" in result.output
