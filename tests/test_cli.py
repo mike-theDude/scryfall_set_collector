@@ -302,18 +302,20 @@ def test_stats_all_runs_every_section(mock_scryfall, db_path) -> None:
     assert result.exit_code == 0, result.output
     for header in ("By rarity", "By color", "By type", "Mana curve", "Progress"):
         assert header in result.output, header
-    # --value fetches live prices.
-    assert "Fetching current prices" in result.output
+    # --value reads cached prices (no live fetch).
+    assert "Fetching current prices" not in result.output
     assert "Estimated value" in result.output
     # Progress sees NEO as newest/oldest owned.
     assert "Newest owned" in result.output and "NEO" in result.output
 
 
-def test_stats_value_skipped_with_no_remote(mock_scryfall, db_path) -> None:
+def test_stats_value_uses_cached_prices_offline(mock_scryfall, db_path) -> None:
+    # --value reads prices from the cached card data, so it works under --no-remote
+    # and makes no network call (issue #58).
     assert add_neo(db_path).exit_code == 0
     result = runner.invoke(app, ["stats", "--value", "--no-remote", "--db-path", str(db_path)])
     assert result.exit_code == 0, result.output
-    assert "needs live Scryfall prices" in result.output
+    assert "Estimated value" in result.output
     assert "Fetching current prices" not in result.output
 
 
