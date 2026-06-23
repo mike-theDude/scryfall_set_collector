@@ -9,6 +9,7 @@ runs end to end, but the bodies are stubs filled in by issues #2-#10.
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from pathlib import Path
 
 import typer
@@ -136,9 +137,56 @@ def preview(set_code: str = typer.Argument(..., help="Set code, e.g. NEO.")) -> 
 
 
 @app.command()
-def add(set_code: str = typer.Argument(..., help="Set code, e.g. NEO.")) -> None:
-    """Mark a set as fully owned and generate card entries (issue #7)."""
-    console.print(f"add {set_code.upper()}: {_TODO}")
+def add(
+    set_code: str = typer.Argument(..., help="Set code, e.g. NEO."),
+    db_path: Path = typer.Option(db.DB_PATH, "--db-path", help="Database file location."),
+) -> None:
+    """Mark a set as fully owned and generate its card-level entries."""
+    set_obj, cards = _load_set(set_code)
+    breakdown = collection.build_breakdown(cards)
+    code = (set_obj.get("code") or set_code).lower()
+    display_code = code.upper()
+
+    if not breakdown.included_count:
+        console.print(
+            f"[yellow]Nothing to add[/yellow] for [bold]{display_code}[/bold] — no cards "
+            "qualify for the full set (unreleased or boosterless?)."
+        )
+        raise typer.Exit(1)
+
+    db.init_db(db_path)
+    conn = db.get_connection(db_path)
+    try:
+        if db.is_set_owned(conn, code):
+            console.print(
+                f"[yellow]{display_code} is already owned.[/yellow] Use "
+                f"[bold]mtgsets remove {display_code}[/bold] first to re-add it."
+            )
+            raise typer.Exit(1)
+
+        entries = collection.generate_full_set_entries(code, breakdown.included)
+        added_at = datetime.now(timezone.utc).isoformat()
+        try:
+            db.upsert_cards(conn, breakdown.included)
+            db.insert_owned_set(
+                conn,
+                set_code=code,
+                set_name=set_obj.get("name", display_code),
+                added_at=added_at,
+            )
+            written = db.insert_collection_entries(conn, (e.as_row() for e in entries))
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+    finally:
+        conn.close()
+
+    console.print(
+        f"[green]Added[/green] {set_obj.get('name', display_code)} "
+        f"([cyan]{display_code}[/cyan]): generated [green]{written}[/green] entries "
+        f"([dim]{len(breakdown.main_cards)} main + {len(breakdown.basics)} basics[/dim])."
+    )
 
 
 @app.command(name="list")
