@@ -54,11 +54,12 @@ def db_path(tmp_path):
     return tmp_path / "collection.db"
 
 
-def add_neo(db_path) -> "object":
+def add_neo(db_path) -> object:
     return runner.invoke(app, ["add", "NEO", "--db-path", str(db_path)])
 
 
 # -- happy path: add -> list -> export -> remove ---------------------------------
+
 
 def test_full_workflow(mock_scryfall, db_path, tmp_path) -> None:
     csv_path = tmp_path / "out" / "moxfield.csv"
@@ -100,6 +101,7 @@ def test_full_workflow(mock_scryfall, db_path, tmp_path) -> None:
 
 # -- preview ---------------------------------------------------------------------
 
+
 def test_preview_shows_breakdown(mock_scryfall, db_path) -> None:
     result = runner.invoke(app, ["preview", "NEO"])
     assert result.exit_code == 0, result.output
@@ -108,6 +110,7 @@ def test_preview_shows_breakdown(mock_scryfall, db_path) -> None:
 
 
 # -- guard paths -----------------------------------------------------------------
+
 
 def test_add_already_owned_exits_1(mock_scryfall, db_path) -> None:
     assert add_neo(db_path).exit_code == 0
@@ -167,6 +170,7 @@ def test_preview_unknown_set_exits_1(mock_scryfall) -> None:
 
 
 # -- search ----------------------------------------------------------------------
+
 
 def test_search_lists_matches(mock_scryfall) -> None:
     result = runner.invoke(app, ["search", "neo"])

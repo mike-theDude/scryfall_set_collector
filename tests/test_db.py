@@ -18,8 +18,9 @@ import pytest
 from mtgsets import db
 
 
-def make_card(card_id: str, *, set_code: str = "neo", name: str = "Test Card",
-              collector_number: str = "1") -> dict:
+def make_card(
+    card_id: str, *, set_code: str = "neo", name: str = "Test Card", collector_number: str = "1"
+) -> dict:
     """A minimal raw Scryfall-shaped card sufficient for db.upsert_cards."""
     return {
         "id": card_id,
@@ -36,8 +37,14 @@ def make_card(card_id: str, *, set_code: str = "neo", name: str = "Test Card",
     }
 
 
-def add_entry(conn, card_id: str, set_code: str, source_type: str,
-              source_set_code: str | None, collector_number: str = "1") -> None:
+def add_entry(
+    conn,
+    card_id: str,
+    set_code: str,
+    source_type: str,
+    source_set_code: str | None,
+    collector_number: str = "1",
+) -> None:
     """Insert one collection_entries row with an explicit source tagging."""
     row = (card_id, set_code, 1, "Near Mint", "English", 0, source_type, source_set_code)
     db.insert_collection_entries(conn, [row])
@@ -66,6 +73,7 @@ def entry_signatures(conn) -> set[tuple]:
 
 # -- init_db ----------------------------------------------------------------------
 
+
 def test_init_db_reports_creation(tmp_path) -> None:
     db_path = tmp_path / "c.db"
     assert db.init_db(db_path) is True  # created
@@ -73,6 +81,7 @@ def test_init_db_reports_creation(tmp_path) -> None:
 
 
 # -- owned-set round trip ---------------------------------------------------------
+
 
 def test_insert_and_is_set_owned_case_insensitive(conn) -> None:
     assert db.is_set_owned(conn, "neo") is False
@@ -85,6 +94,7 @@ def test_insert_and_is_set_owned_case_insensitive(conn) -> None:
 
 # -- FK enforcement ---------------------------------------------------------------
 
+
 def test_collection_entry_requires_existing_card(conn) -> None:
     # No card cached, so the FK to cards(scryfall_id) must reject the entry.
     with pytest.raises(sqlite3.IntegrityError):
@@ -93,18 +103,24 @@ def test_collection_entry_requires_existing_card(conn) -> None:
 
 # -- the removal invariant --------------------------------------------------------
 
+
 def seed_removal_scenario(conn) -> None:
     """Two owned sets, generated entries for each, plus a manual single and an
     override that is *deliberately* tagged with source_set_code='neo'."""
-    db.upsert_cards(conn, [
-        make_card("neo-1", set_code="neo", name="NEO One", collector_number="1"),
-        make_card("neo-2", set_code="neo", name="NEO Two", collector_number="2"),
-        make_card("mom-1", set_code="mom", name="MOM One", collector_number="1"),
-        make_card("manual-1", set_code="neo", name="Manual Single", collector_number="9"),
-        make_card("override-1", set_code="neo", name="Override Card", collector_number="8"),
-    ])
+    db.upsert_cards(
+        conn,
+        [
+            make_card("neo-1", set_code="neo", name="NEO One", collector_number="1"),
+            make_card("neo-2", set_code="neo", name="NEO Two", collector_number="2"),
+            make_card("mom-1", set_code="mom", name="MOM One", collector_number="1"),
+            make_card("manual-1", set_code="neo", name="Manual Single", collector_number="9"),
+            make_card("override-1", set_code="neo", name="Override Card", collector_number="8"),
+        ],
+    )
     db.insert_owned_set(conn, set_code="neo", set_name="Neon Dynasty", added_at="2024-02-01")
-    db.insert_owned_set(conn, set_code="mom", set_name="March of the Machine", added_at="2024-01-01")
+    db.insert_owned_set(
+        conn, set_code="mom", set_name="March of the Machine", added_at="2024-01-01"
+    )
     conn.commit()
 
     add_entry(conn, "neo-1", "neo", "full_set", "neo")
@@ -152,6 +168,7 @@ def test_remove_unowned_set_is_noop(conn) -> None:
 
 # -- count_full_set_entries -------------------------------------------------------
 
+
 def test_count_full_set_entries(conn) -> None:
     seed_removal_scenario(conn)
     assert db.count_full_set_entries(conn, "neo") == 2
@@ -161,6 +178,7 @@ def test_count_full_set_entries(conn) -> None:
 
 
 # -- list_owned_sets --------------------------------------------------------------
+
 
 def test_list_owned_sets_counts_and_ordering(conn) -> None:
     seed_removal_scenario(conn)
@@ -182,14 +200,18 @@ def test_list_owned_sets_zero_entries(conn) -> None:
 
 # -- get_export_entries -----------------------------------------------------------
 
+
 def test_get_export_entries_numeric_aware_ordering(conn) -> None:
     # Same set, collector numbers that sort differently as text vs as integers.
-    db.upsert_cards(conn, [
-        make_card("c-100", set_code="neo", name="Hundred", collector_number="100"),
-        make_card("c-2", set_code="neo", name="Two", collector_number="2"),
-        make_card("c-10", set_code="neo", name="Ten", collector_number="10"),
-        make_card("m-1", set_code="mom", name="Mom One", collector_number="1"),
-    ])
+    db.upsert_cards(
+        conn,
+        [
+            make_card("c-100", set_code="neo", name="Hundred", collector_number="100"),
+            make_card("c-2", set_code="neo", name="Two", collector_number="2"),
+            make_card("c-10", set_code="neo", name="Ten", collector_number="10"),
+            make_card("m-1", set_code="mom", name="Mom One", collector_number="1"),
+        ],
+    )
     conn.commit()
     add_entry(conn, "c-100", "neo", "full_set", "neo", collector_number="100")
     add_entry(conn, "c-2", "neo", "full_set", "neo", collector_number="2")

@@ -9,8 +9,9 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 #: Default on-disk location of the collection database (gitignored).
 DB_PATH = Path("data") / "collection.db"
@@ -219,20 +220,15 @@ def remove_owned_set(conn: sqlite3.Connection, set_code: str) -> tuple[int, bool
     """
     code = set_code.lower()
     entries_deleted = conn.execute(
-        "DELETE FROM collection_entries "
-        "WHERE source_type = 'full_set' AND source_set_code = ?",
+        "DELETE FROM collection_entries WHERE source_type = 'full_set' AND source_set_code = ?",
         (code,),
     ).rowcount
-    set_existed = (
-        conn.execute("DELETE FROM owned_sets WHERE set_code = ?", (code,)).rowcount > 0
-    )
+    set_existed = conn.execute("DELETE FROM owned_sets WHERE set_code = ?", (code,)).rowcount > 0
     conn.commit()
     return entries_deleted, set_existed
 
 
-def insert_collection_entries(
-    conn: sqlite3.Connection, rows: Iterable[tuple[Any, ...]]
-) -> int:
+def insert_collection_entries(conn: sqlite3.Connection, rows: Iterable[tuple[Any, ...]]) -> int:
     """Insert collection_entries rows. Does not commit (caller owns the transaction).
 
     Each row is column-ordered: (scryfall_id, set_code, quantity, condition,

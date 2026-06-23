@@ -6,10 +6,11 @@ Pure functions over the filter rules; no I/O. Uses the real fixtures from #27.
 from __future__ import annotations
 
 from conftest import card_by_name
+
 from mtgsets import collection, filters
 
-
 # -- _is_basic_land ---------------------------------------------------------------
+
 
 def test_is_basic_land_detection(neo_cards) -> None:
     assert collection._is_basic_land(card_by_name(neo_cards, "Plains")) is True
@@ -22,6 +23,7 @@ def test_is_basic_land_handles_missing_type_line() -> None:
 
 
 # -- build_breakdown --------------------------------------------------------------
+
 
 def test_build_breakdown_partitions_neo(neo_cards) -> None:
     breakdown = collection.build_breakdown(neo_cards)
@@ -68,6 +70,7 @@ def test_empty_breakdown() -> None:
 
 # -- SetBreakdown properties ------------------------------------------------------
 
+
 def test_basics_and_main_cards_split(neo_cards) -> None:
     breakdown = collection.build_breakdown(neo_cards)
     assert [c["name"] for c in breakdown.basics] == ["Plains"]
@@ -84,6 +87,7 @@ def test_breakdown_count_arithmetic(all_sample_cards) -> None:
 
 
 # -- generate_full_set_entries ----------------------------------------------------
+
 
 def test_generate_full_set_entries_one_per_card(neo_cards) -> None:
     included = collection.build_breakdown(neo_cards).included
@@ -112,10 +116,9 @@ def test_generate_full_set_entries_empty() -> None:
 
 # -- GeneratedEntry.as_row matches the DB column order ----------------------------
 
+
 def test_as_row_column_order() -> None:
-    entry = collection.GeneratedEntry(
-        scryfall_id="abc-123", set_code="neo", source_set_code="neo"
-    )
+    entry = collection.GeneratedEntry(scryfall_id="abc-123", set_code="neo", source_set_code="neo")
     assert entry.as_row() == (
         "abc-123",  # scryfall_id
         "neo",  # set_code
@@ -131,9 +134,7 @@ def test_as_row_column_order() -> None:
 def test_as_row_aligns_with_db_insert_columns() -> None:
     # The row tuple must line up positionally with the INSERT in db.py; if the
     # schema column order ever changes, this and as_row must move together.
-    entry = collection.GeneratedEntry(
-        scryfall_id="abc-123", set_code="neo", source_set_code="neo"
-    )
+    entry = collection.GeneratedEntry(scryfall_id="abc-123", set_code="neo", source_set_code="neo")
     columns = (
         "scryfall_id",
         "set_code",
@@ -144,7 +145,7 @@ def test_as_row_aligns_with_db_insert_columns() -> None:
         "source_type",
         "source_set_code",
     )
-    row = dict(zip(columns, entry.as_row()))
+    row = dict(zip(columns, entry.as_row(), strict=True))
     assert row == {
         "scryfall_id": "abc-123",
         "set_code": "neo",

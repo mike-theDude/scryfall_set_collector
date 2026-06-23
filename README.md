@@ -172,6 +172,21 @@ Python · [Typer](https://typer.tiangolo.com/) (CLI) ·
 [Rich](https://rich.readthedocs.io/) (output) · httpx (HTTP) · SQLite ·
 [Scryfall API](https://scryfall.com/docs/api)
 
+## Development
+
+Install the dev extras, then run the tests and linter:
+
+```bash
+pip install -e .[dev]
+
+pytest                     # run the test suite
+ruff check .               # lint
+ruff format --check .      # check formatting (drop --check to auto-format)
+```
+
+CI runs all three on every push and pull request (Python 3.10–3.13). The test
+suite makes no network calls — the Scryfall API is mocked.
+
 ## Roadmap
 
 The initial CLI is complete: `init`, `search`, `preview`, `add`, `list`, `remove`,

@@ -9,9 +9,7 @@ from __future__ import annotations
 from mtgsets import export
 
 # The canonical header and example data row from docs/DESIGN.md.
-EXPECTED_HEADER = (
-    "Count,Tradelist Count,Name,Edition,Condition,Language,Foil,Tags,Collector Number"
-)
+EXPECTED_HEADER = "Count,Tradelist Count,Name,Edition,Condition,Language,Foil,Tags,Collector Number"
 EXPECTED_ROW = '1,0,"Boseiju, Who Endures",NEO,Near Mint,English,,Full Set: NEO,266'
 
 
@@ -34,6 +32,7 @@ def boseiju_entry(**overrides) -> dict:
 
 # -- _tag_for ---------------------------------------------------------------------
 
+
 def test_tag_for_set_generated() -> None:
     assert export._tag_for(boseiju_entry()) == "Full Set: NEO"
 
@@ -44,6 +43,7 @@ def test_tag_for_manual_single_is_empty() -> None:
 
 
 # -- entry_to_row -----------------------------------------------------------------
+
 
 def test_entry_to_row_column_order_and_defaults() -> None:
     assert export.entry_to_row(boseiju_entry()) == [
@@ -77,6 +77,7 @@ def test_entry_to_row_manual_single_has_no_tag() -> None:
 
 
 # -- write_moxfield_csv -----------------------------------------------------------
+
 
 def test_write_reproduces_design_example_byte_for_byte(tmp_path) -> None:
     dest = tmp_path / "moxfield.csv"
