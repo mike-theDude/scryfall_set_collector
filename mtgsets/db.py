@@ -7,8 +7,10 @@ below in sync with the design doc.
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from pathlib import Path
+from typing import Any, Iterable
 
 #: Default on-disk location of the collection database (gitignored).
 DB_PATH = Path("data") / "collection.db"
@@ -85,3 +87,40 @@ def init_db(db_path: Path = DB_PATH) -> bool:
     finally:
         conn.close()
     return not existed
+
+
+def _card_row(raw: dict[str, Any]) -> tuple[Any, ...]:
+    """Map a raw Scryfall card object to a `cards` table row (see docs/DESIGN.md)."""
+    booster = raw.get("booster")
+    return (
+        raw["id"],
+        raw["name"],
+        raw["set"],
+        raw["collector_number"],
+        raw.get("lang"),
+        raw.get("rarity"),
+        raw.get("type_line"),
+        int(bool(raw.get("digital", False))),
+        int(bool(raw.get("promo", False))),
+        int(bool(raw.get("variation", False))),
+        None if booster is None else int(bool(booster)),
+        json.dumps(raw, separators=(",", ":")),
+    )
+
+
+def upsert_cards(conn: sqlite3.Connection, raw_cards: Iterable[dict[str, Any]]) -> int:
+    """Insert or replace raw Scryfall card objects into the `cards` cache.
+
+    Keyed by scryfall_id, so re-fetching a set refreshes existing rows. Returns the
+    number of rows written.
+    """
+    rows = [_card_row(c) for c in raw_cards]
+    conn.executemany(
+        "INSERT OR REPLACE INTO cards "
+        "(scryfall_id, name, set_code, collector_number, lang, rarity, type_line, "
+        "digital, promo, variation, booster, full_json) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        rows,
+    )
+    conn.commit()
+    return len(rows)
