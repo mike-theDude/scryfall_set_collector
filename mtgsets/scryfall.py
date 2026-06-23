@@ -112,3 +112,23 @@ class ScryfallClient:
             if exc.status_code == 404:
                 return []
             raise
+
+
+def match_sets(
+    sets: list[dict[str, Any]], query: str
+) -> list[dict[str, Any]]:
+    """Filter sets whose code or name contains ``query`` (case-insensitive).
+
+    Scryfall has no server-side set search, so the caller fetches all sets via
+    :meth:`ScryfallClient.get_sets` and narrows them here. Results are sorted by
+    release date, newest first (undated sets last).
+    """
+    needle = query.strip().lower()
+    matches = [
+        s
+        for s in sets
+        if needle in (s.get("code") or "").lower()
+        or needle in (s.get("name") or "").lower()
+    ]
+    matches.sort(key=lambda s: s.get("released_at") or "", reverse=True)
+    return matches
