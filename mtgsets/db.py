@@ -164,6 +164,24 @@ def insert_owned_set(
     )
 
 
+def list_owned_sets(conn: sqlite3.Connection) -> list[sqlite3.Row]:
+    """Return owned sets with their generated full-set entry counts, newest first.
+
+    Each row exposes the owned_sets columns plus ``entry_count`` — the number of
+    collection_entries generated for that set (source_type='full_set').
+    """
+    return conn.execute(
+        "SELECT o.set_code, o.set_name, o.quantity, o.language, o.condition, "
+        "o.foil, o.profile, o.added_at, "
+        "COUNT(e.id) AS entry_count "
+        "FROM owned_sets o "
+        "LEFT JOIN collection_entries e "
+        "  ON e.source_set_code = o.set_code AND e.source_type = 'full_set' "
+        "GROUP BY o.set_code "
+        "ORDER BY o.added_at DESC",
+    ).fetchall()
+
+
 def insert_collection_entries(
     conn: sqlite3.Connection, rows: Iterable[tuple[Any, ...]]
 ) -> int:

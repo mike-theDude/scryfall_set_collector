@@ -190,9 +190,52 @@ def add(
 
 
 @app.command(name="list")
-def list_sets() -> None:
-    """List owned sets (issue #8)."""
-    console.print(f"list: {_TODO}")
+def list_sets(
+    db_path: Path = typer.Option(db.DB_PATH, "--db-path", help="Database file location."),
+) -> None:
+    """List owned sets and their generated entry counts."""
+    if not Path(db_path).exists():
+        console.print(
+            "No collection database yet. Run [bold]mtgsets init[/bold] and "
+            "[bold]mtgsets add <set>[/bold] first."
+        )
+        raise typer.Exit()
+
+    conn = db.get_connection(db_path)
+    try:
+        rows = db.list_owned_sets(conn)
+    finally:
+        conn.close()
+
+    if not rows:
+        console.print("No owned sets yet. Add one with [bold]mtgsets add <set>[/bold].")
+        raise typer.Exit()
+
+    table = Table(title="Owned sets")
+    table.add_column("Code", style="bold cyan")
+    table.add_column("Name")
+    table.add_column("Cards", justify="right")
+    table.add_column("Foil")
+    table.add_column("Condition", style="dim")
+    table.add_column("Language", style="dim")
+    table.add_column("Added", style="dim")
+    total_entries = 0
+    for r in rows:
+        total_entries += r["entry_count"]
+        table.add_row(
+            r["set_code"].upper(),
+            r["set_name"],
+            str(r["entry_count"]),
+            "yes" if r["foil"] else "no",
+            r["condition"],
+            r["language"],
+            (r["added_at"] or "")[:10],
+        )
+    console.print(table)
+    console.print(
+        f"[green]{len(rows)}[/green] set(s), "
+        f"[green]{total_entries}[/green] generated card entries."
+    )
 
 
 @app.command()
