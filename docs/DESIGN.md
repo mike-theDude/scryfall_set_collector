@@ -180,6 +180,15 @@ or `override`. This is the symmetric counterpart to the set-removal invariant ab
 The app should also store the Scryfall ID internally for traceability even though
 Moxfield ignores it.
 
+**Import** (`mtgsets import-csv`) reads this **same format** — there is no separate
+import schema, so an exported collection round-trips. Parsing is header-based and
+case-insensitive, so reordered/extra columns are tolerated; only `Edition` +
+`Collector Number` (the printing key) are required, and `Count`/`Condition`/
+`Language`/`Foil` populate the entry. Imported cards are inserted as `manual` singles
+(`source_type = manual`). Rows tagged `Full Set: <CODE>` are **skipped** (whole sets
+are added via `add`), and re-importing a printing stacks onto its existing manual
+quantity rather than duplicating it.
+
 ---
 
 ## Preview behavior

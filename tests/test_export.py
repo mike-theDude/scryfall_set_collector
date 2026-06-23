@@ -120,3 +120,73 @@ def test_write_empty_collection_writes_header_only(tmp_path) -> None:
 
 def test_header_columns_match_constant(tmp_path) -> None:
     assert ",".join(export.MOXFIELD_COLUMNS) == EXPECTED_HEADER
+
+
+# -- parse_moxfield_csv (import, issue #61) ---------------------------------------
+
+
+def parse_one(*rows: str) -> list[export.ImportRow]:
+    """Parse a header plus the given data rows."""
+    return export.parse_moxfield_csv([EXPECTED_HEADER, *rows])
+
+
+def test_parse_basic_row_fields() -> None:
+    (row,) = parse_one("2,0,Ao the Dawn Sky,NEO,Lightly Played,Japanese,foil,,2")
+    assert row.edition == "neo"  # lowercased
+    assert row.collector_number == "2"
+    assert row.quantity == 2
+    assert row.condition == "Lightly Played"
+    assert row.language == "Japanese"
+    assert row.foil == 1
+    assert row.is_full_set is False
+    assert row.error is None
+
+
+def test_parse_defaults_for_blank_optional_fields() -> None:
+    # Blank Count/Condition/Language fall back to sane defaults; blank Foil -> nonfoil.
+    (row,) = parse_one(",0,Plains,NEO,,,,, 283")
+    assert row.quantity == 1
+    assert row.condition == "Near Mint"
+    assert row.language == "English"
+    assert row.foil == 0
+    assert row.collector_number == "283"  # surrounding whitespace stripped
+
+
+def test_parse_invalid_count_falls_back_to_one() -> None:
+    (row,) = parse_one("abc,0,Plains,NEO,Near Mint,English,,,283")
+    assert row.quantity == 1
+
+
+def test_parse_full_set_tag_detected() -> None:
+    (row,) = parse_one('1,0,"Boseiju, Who Endures",NEO,Near Mint,English,,Full Set: NEO,266')
+    assert row.is_full_set is True
+
+
+def test_parse_missing_edition_or_number_is_error() -> None:
+    (no_number,) = parse_one("1,0,Plains,NEO,Near Mint,English,,,")
+    assert no_number.error is not None
+    (no_edition,) = parse_one("1,0,Plains,,Near Mint,English,,,283")
+    assert no_edition.error is not None
+
+
+def test_parse_is_case_insensitive_on_headers_and_tolerates_extra_columns() -> None:
+    rows = export.parse_moxfield_csv(
+        ["edition,collector number,count,foil,extra", "neo,2,3,Foil,ignored"]
+    )
+    assert rows[0].edition == "neo"
+    assert rows[0].collector_number == "2"
+    assert rows[0].quantity == 3
+    assert rows[0].foil == 1
+
+
+def test_parse_line_numbers_are_data_relative() -> None:
+    rows = parse_one(
+        "1,0,Ao,NEO,Near Mint,English,,,2",
+        "1,0,Plains,NEO,Near Mint,English,,,283",
+    )
+    assert [r.line for r in rows] == [1, 2]
+
+
+def test_parse_empty_input_is_empty_list() -> None:
+    assert export.parse_moxfield_csv([EXPECTED_HEADER]) == []
+    assert export.parse_moxfield_csv([]) == []
