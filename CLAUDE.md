@@ -81,6 +81,20 @@ All issue work happens on a dedicated branch. **Do not commit issue work directl
   (`Closes #<issue#>`) so merging auto-closes the issue.
 - Keep a branch scoped to its single issue; spin up a new branch for a new issue.
 
+## Merging — CI must be fully green (enforced)
+
+**A PR may not be merged until CI is fully passing.** This is an absolute condition,
+not a judgement call: never merge a PR with a failing, pending, or skipped required
+check, and never bypass it.
+
+- All five required checks must pass: `lint (ruff)` and `test (py3.10/3.11/3.12/3.13)`.
+  This includes `ruff format --check` — run `ruff format .` before pushing.
+- `main` is protected on GitHub with these required status checks, `strict` mode
+  (the branch must be up to date with `main`), and `enforce_admins` (no override).
+  `gh pr merge` will refuse until every check is green — do not work around it.
+- Before merging, confirm green CI (e.g. `gh pr checks <#>`); prefer
+  `gh pr merge <#> --squash --auto` so the merge happens only once checks pass.
+
 ## Conventions
 
 - Keep the schema and export format in sync with `docs/DESIGN.md`; once code is the
