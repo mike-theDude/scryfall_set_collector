@@ -179,13 +179,15 @@ Install the dev extras, then run the tests and linter:
 ```bash
 pip install -e .[dev]
 
-pytest                     # run the test suite
-ruff check .               # lint
-ruff format --check .      # check formatting (drop --check to auto-format)
+pytest                                  # run the test suite
+pytest --cov=mtgsets --cov-report=term-missing   # with a coverage report
+ruff check .                            # lint
+ruff format --check .                   # check formatting (drop --check to auto-format)
 ```
 
-CI runs all three on every push and pull request (Python 3.10–3.13). The test
-suite makes no network calls — the Scryfall API is mocked.
+CI runs the linter and the test suite on every push and pull request (Python
+3.10–3.13) and reports coverage (report-only — it never fails the build). The
+test suite makes no network calls — the Scryfall API is mocked.
 
 ## Roadmap
 
