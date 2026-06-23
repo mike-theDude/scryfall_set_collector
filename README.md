@@ -178,15 +178,17 @@ Add flags for deeper breakdowns (or `--all` for everything):
 | `--curve` | Mana-value curve of owned nonland cards. |
 | `--progress` | Newest/oldest set owned, sets behind the latest release, coverage by year, and sets added over time. |
 | `--year <YYYY>` | List the core/expansion sets you **own** vs. those you're **missing** from that release year, with an owned/total count. Only sets released as of today count; ones due later in the year are listed separately as **Upcoming**. |
+| `--from-year <YYYY> --to-year <YYYY>` | The `--year` breakdown for every year in the **inclusive range**, plus a roll-up of owned/total across the whole span. Both bounds are required and `--from-year` must not be after `--to-year`. |
 | `--value` | Estimated collection value from **cached** Scryfall prices, with top cards and sets. |
 | `--all` | Show every section above. |
-| `--no-remote` | Skip Scryfall entirely — composition and `--value` still work; the total-sets, `--progress`, and `--year` sections are omitted. |
+| `--no-remote` | Skip Scryfall entirely — composition and `--value` still work; the total-sets, `--progress`, `--year`, and year-range sections are omitted. |
 
 `--rarity`, `--colors`, `--types`, `--curve`, and `--value` read the locally cached
 card data (no network). `--value` uses the prices stored when each set was added or
 last refreshed, so it works offline but is only as fresh as that snapshot — run
-`mtgsets refresh <set>` to pull current prices. `--progress` and `--year` use
-the Scryfall set list, so they need a connection (and are skipped under `--no-remote`).
+`mtgsets refresh <set>` to pull current prices. `--progress`, `--year`, and the
+`--from-year`/`--to-year` range use the Scryfall set list, so they need a connection
+(and are skipped under `--no-remote`).
 
 ```
 $ mtgsets stats --year 2026
@@ -204,6 +206,22 @@ Collection stats
     ✗ SOS (2026-06-12) — Secrets of Strixhaven
   Upcoming (not released yet):
     … BLB (2026-09-26) — Bloomburrow II
+```
+
+To audit a span of years at once, give a range — each year is broken down as above and
+a roll-up closes it out:
+
+```
+$ mtgsets stats --from-year 2022 --to-year 2023
+
+...
+
+2022 sets  1 / 2 owned  (50.0%)
+  ...
+2023 sets  0 / 1 owned  (0.0%)
+  ...
+
+2022–2023 total  1 / 3 owned  (33.3%)
 ```
 
 ### Example: preview

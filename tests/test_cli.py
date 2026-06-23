@@ -659,3 +659,56 @@ def test_stats_year_lists_unreleased_sets_as_upcoming(monkeypatch, db_path) -> N
     assert "Missing:" not in result.output
     # Nothing is out yet in 2099, so the total is empty.
     assert "No core/expansion sets released in 2099" in result.output
+
+
+# -- stats --from-year/--to-year (issue #77) -------------------------------------
+
+
+def test_stats_range_lists_each_year_and_rollup(mock_scryfall, db_path) -> None:
+    # Own NEO (2022); the mock also knows MOM (2023). The span shows both years
+    # plus a roll-up: 1 of 2 sets owned across 2022-2023.
+    assert add_neo(db_path).exit_code == 0
+    result = runner.invoke(
+        app, ["stats", "--from-year", "2022", "--to-year", "2023", "--db-path", str(db_path)]
+    )
+    assert result.exit_code == 0, result.output
+    assert "2022 sets" in result.output and "2023 sets" in result.output
+    assert "NEO" in result.output and "MOM" in result.output
+    assert "2022–2023 total" in result.output
+    assert "1 / 2 owned" in result.output and "50.0%" in result.output
+
+
+def test_stats_range_requires_both_bounds(mock_scryfall, db_path) -> None:
+    assert add_neo(db_path).exit_code == 0
+    result = runner.invoke(app, ["stats", "--from-year", "2022", "--db-path", str(db_path)])
+    assert result.exit_code == 1
+    assert "must be used together" in result.output
+
+
+def test_stats_range_rejects_inverted_bounds(mock_scryfall, db_path) -> None:
+    assert add_neo(db_path).exit_code == 0
+    result = runner.invoke(
+        app,
+        ["stats", "--from-year", "2023", "--to-year", "2022", "--db-path", str(db_path)],
+    )
+    assert result.exit_code == 1
+    assert "must not be after" in result.output
+
+
+def test_stats_range_skipped_with_no_remote(mock_scryfall, db_path) -> None:
+    assert add_neo(db_path).exit_code == 0
+    result = runner.invoke(
+        app,
+        [
+            "stats",
+            "--from-year",
+            "2022",
+            "--to-year",
+            "2023",
+            "--no-remote",
+            "--db-path",
+            str(db_path),
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert "2022–2023 sets" in result.output and "needs Scryfall" in result.output

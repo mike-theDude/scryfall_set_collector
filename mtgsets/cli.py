@@ -801,6 +801,16 @@ def _print_year(y: stats.YearStats) -> None:
             console.print(f"    [cyan]{r.code.upper()}[/cyan] ({r.released_at}) — {r.name}")
 
 
+def _print_range(r: stats.RangeStats) -> None:
+    for y in r.years:
+        _print_year(y)
+    pct = r.pct
+    summary = f"  [green]{r.owned_total}[/green] / [bold]{r.release_total}[/bold] owned"
+    if pct is not None:
+        summary += f"  [dim]({pct:.1f}%)[/dim]"
+    console.print(f"\n[bold]{r.from_year}–{r.to_year} total[/bold]{summary}")
+
+
 def _print_value(v: stats.ValueStats) -> None:
     console.print(
         f"\n[bold]Estimated value[/bold]  [green]${v.total_usd:,.2f}[/green]  "
@@ -837,6 +847,12 @@ def stats_command(
     year: int | None = typer.Option(
         None, "--year", help="List owned vs. missing core/expansion sets from a release year."
     ),
+    from_year: int | None = typer.Option(
+        None, "--from-year", help="Start of a release-year range (use with --to-year)."
+    ),
+    to_year: int | None = typer.Option(
+        None, "--to-year", help="End of a release-year range (use with --from-year)."
+    ),
     show_all: bool = typer.Option(False, "--all", help="Show every breakdown section."),
 ) -> None:
     """Show collection statistics — sets owned vs. total, with optional breakdowns.
@@ -846,6 +862,19 @@ def stats_command(
     """
     if show_all:
         rarity = colors = types = curve = progress = value = True
+
+    # Validate the year range up front so bad input fails before any Scryfall fetch.
+    if (from_year is None) != (to_year is None):
+        console.print(
+            "[red]--from-year and --to-year must be used together.[/red] "
+            "Use [bold]--year[/bold] for a single year."
+        )
+        raise typer.Exit(1)
+    if from_year is not None and to_year is not None and from_year > to_year:
+        console.print(
+            f"[red]--from-year ({from_year}) must not be after --to-year ({to_year}).[/red]"
+        )
+        raise typer.Exit(1)
 
     if not Path(db_path).exists():
         console.print(
@@ -918,6 +947,26 @@ def stats_command(
             _print_year(
                 stats.build_year_stats(
                     owned_codes, all_sets, scryfall.release_sets(all_sets), str(year), today
+                )
+            )
+
+    # -- year-range breakdown (needs the Scryfall set list) -----------------
+    if from_year is not None and to_year is not None:
+        if all_sets is None:
+            console.print(
+                f"\n[yellow]{from_year}–{to_year} sets[/yellow] needs Scryfall; skipped "
+                "(unreachable or [bold]--no-remote[/bold])."
+            )
+        else:
+            today = datetime.now(timezone.utc).date()
+            _print_range(
+                stats.build_range_stats(
+                    owned_codes,
+                    all_sets,
+                    scryfall.release_sets(all_sets),
+                    from_year,
+                    to_year,
+                    today,
                 )
             )
 
