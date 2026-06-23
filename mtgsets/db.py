@@ -201,21 +201,41 @@ def get_export_entries(conn: sqlite3.Connection) -> list[sqlite3.Row]:
     ).fetchall()
 
 
-def get_owned_cards(conn: sqlite3.Connection) -> list[tuple[int, dict[str, Any]]]:
-    """Return ``(quantity, full Scryfall card object)`` for every collection entry.
+def get_owned_cards(
+    conn: sqlite3.Connection, source_set_code: str | None = None
+) -> list[tuple[int, dict[str, Any]]]:
+    """Return ``(quantity, full Scryfall card object)`` for collection entries.
 
     Joins collection_entries to the cached ``cards`` table and parses each stored
     ``full_json`` blob, so the stats layer can aggregate by rarity/color/type/mana
     value/price without re-hitting Scryfall. The raw object carries everything those
     breakdowns need (``rarity``, ``color_identity``, ``type_line``, ``cmc``,
-    ``prices``, ``set``, ``id``).
+    ``prices``, ``set``, ``id``, ``collector_number``, ``name``).
+
+    With ``source_set_code``, scope to a single set's generated entries
+    (source_type='full_set'), e.g. for ``show`` — manual singles and overrides are
+    excluded. Without it, every entry is returned (the whole-collection default).
     """
-    rows = conn.execute(
+    sql = (
         "SELECT e.quantity AS quantity, c.full_json AS full_json "
         "FROM collection_entries e "
         "JOIN cards c ON c.scryfall_id = e.scryfall_id"
-    ).fetchall()
+    )
+    params: tuple[Any, ...] = ()
+    if source_set_code is not None:
+        sql += " WHERE e.source_type = 'full_set' AND e.source_set_code = ?"
+        params = (source_set_code.lower(),)
+    rows = conn.execute(sql, params).fetchall()
     return [(row["quantity"], json.loads(row["full_json"])) for row in rows]
+
+
+def get_owned_set(conn: sqlite3.Connection, set_code: str) -> sqlite3.Row | None:
+    """Return the owned_sets row for ``set_code``, or None if not owned."""
+    return conn.execute(
+        "SELECT set_code, set_name, quantity, language, condition, foil, profile, added_at "
+        "FROM owned_sets WHERE set_code = ?",
+        (set_code.lower(),),
+    ).fetchone()
 
 
 def count_full_set_entries(conn: sqlite3.Connection, set_code: str) -> int:

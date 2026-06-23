@@ -284,6 +284,44 @@ def scryfall_owned_row(db_path, code: str, name: str):
     return conn
 
 
+# -- show ------------------------------------------------------------------------
+
+
+def test_show_lists_set_contents(mock_scryfall, db_path) -> None:
+    assert add_neo(db_path).exit_code == 0
+    result = runner.invoke(app, ["show", "NEO", "--db-path", str(db_path)])
+    assert result.exit_code == 0, result.output
+    # Header + summary.
+    assert "Set:" in result.output and "Kamigawa: Neon Dynasty" in result.output
+    assert "Cards" in result.output and "3 main + 1 basics" in result.output
+    # Composition + the card listing (the "contents").
+    assert "By rarity" in result.output
+    assert "NEO cards" in result.output
+    assert "Plains" in result.output  # the basic land, only listed in the card table
+    assert "Mythic" in result.output  # Ao, the Dawn Sky is mythic
+
+
+def test_show_no_cards_prints_summary_only(mock_scryfall, db_path) -> None:
+    assert add_neo(db_path).exit_code == 0
+    result = runner.invoke(app, ["show", "NEO", "--no-cards", "--db-path", str(db_path)])
+    assert result.exit_code == 0, result.output
+    assert "By rarity" in result.output  # summary still shown
+    assert "Plains" not in result.output  # the per-card table is suppressed
+
+
+def test_show_unowned_set_exits_1(mock_scryfall, db_path) -> None:
+    assert add_neo(db_path).exit_code == 0
+    result = runner.invoke(app, ["show", "MOM", "--db-path", str(db_path)])
+    assert result.exit_code == 1
+    assert "is not owned" in result.output
+
+
+def test_show_missing_db_exits_1(db_path) -> None:
+    result = runner.invoke(app, ["show", "NEO", "--db-path", str(db_path)])
+    assert result.exit_code == 1
+    assert "No collection database" in result.output
+
+
 # -- search ----------------------------------------------------------------------
 
 

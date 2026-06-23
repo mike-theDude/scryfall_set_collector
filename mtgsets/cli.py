@@ -411,6 +411,99 @@ def list_sets(
     )
 
 
+def _collector_sort_key(card: dict) -> tuple[int, str]:
+    """Sort key ordering printings by collector number numerically then as text.
+
+    Mirrors the export ordering (db.get_export_entries): '2' before '10' before
+    '100', with non-numeric numbers (e.g. '266a') falling back to text after the
+    numeric ones.
+    """
+    cn = str(card.get("collector_number") or "")
+    lead = "".join(c for c in cn if c.isdigit())
+    return (int(lead) if lead else 1_000_000, cn)
+
+
+@app.command()
+def show(
+    set_code: str = typer.Argument(..., help="Set code, e.g. NEO."),
+    db_path: Path = typer.Option(db.DB_PATH, "--db-path", help="Database file location."),
+    cards: bool = typer.Option(
+        True, "--cards/--no-cards", help="List the individual cards (default), or just the summary."
+    ),
+) -> None:
+    """Show the details and contents of an owned set.
+
+    Reads only the locally cached data (no network), so it reflects the snapshot
+    from when the set was added or last refreshed. Lists the generated full-set
+    cards; manual singles and overrides are not part of a set's contents.
+    """
+    if not Path(db_path).exists():
+        console.print(
+            "No collection database yet. Run [bold]mtgsets init[/bold] and "
+            "[bold]mtgsets add <set>[/bold] first."
+        )
+        raise typer.Exit(1)
+
+    code = set_code.strip().lower()
+    display_code = code.upper()
+    conn = db.get_connection(db_path)
+    try:
+        owned = db.get_owned_set(conn, code)
+        if owned is None:
+            console.print(
+                f"[yellow]{display_code} is not owned.[/yellow] Add it with "
+                f"[bold]mtgsets add {display_code}[/bold], or see [bold]mtgsets list[/bold]."
+            )
+            raise typer.Exit(1)
+        set_cards = db.get_owned_cards(conn, source_set_code=code)
+    finally:
+        conn.close()
+
+    basics = [c for _, c in set_cards if "Basic Land" in (c.get("type_line") or "")]
+    n_total = len(set_cards)
+    n_basics = len(basics)
+    n_main = n_total - n_basics
+
+    console.print(f"\n[bold]Set:[/bold] {owned['set_name']} ([cyan]{display_code}[/cyan])")
+    console.print(f"  Owned since   [dim]{(owned['added_at'] or '')[:10]}[/dim]")
+    console.print(
+        f"  Cards         [green]{n_total}[/green]  [dim]({n_main} main + {n_basics} basics)[/dim]"
+    )
+
+    if not set_cards:
+        console.print(
+            "\n[yellow]No cached cards for this set.[/yellow] Run "
+            f"[bold]mtgsets refresh {display_code}[/bold] to fetch them."
+        )
+        return
+
+    value = stats.build_value(set_cards)
+    console.print(
+        f"  Value         [green]${value.total_usd:,.2f}[/green]  "
+        "[dim](cached USD prices; run [bold]mtgsets refresh[/bold] to update)[/dim]"
+    )
+
+    _print_breakdown("By rarity", stats.composition_by_rarity(set_cards))
+
+    if not cards:
+        return
+
+    table = Table(title=f"\n{display_code} cards")
+    table.add_column("#", justify="right", style="dim")
+    table.add_column("Name")
+    table.add_column("Rarity")
+    table.add_column("USD", justify="right")
+    for _, card in sorted(set_cards, key=lambda qc: _collector_sort_key(qc[1])):
+        usd = stats.card_usd(card)
+        table.add_row(
+            str(card.get("collector_number") or ""),
+            card.get("name") or "",
+            (card.get("rarity") or "").capitalize(),
+            f"${usd:,.2f}" if usd is not None else "[dim]—[/dim]",
+        )
+    console.print(table)
+
+
 def _print_breakdown(title: str, pairs: list[tuple[str, int]]) -> None:
     """Render a ``[(label, count), ...]`` composition section."""
     console.print(f"\n[bold]{title}[/bold]")
