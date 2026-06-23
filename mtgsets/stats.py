@@ -379,6 +379,68 @@ def build_year_stats(
     )
 
 
+# == Year-range breakdown (issue #77) ============================================
+
+
+@dataclass(frozen=True)
+class RangeStats:
+    """Owned vs. missing core/expansion sets across an inclusive span of years.
+
+    A roll-up over :func:`build_year_stats`: :attr:`years` holds one
+    :class:`YearStats` per year in ``[from_year, to_year]`` (oldest first), and the
+    aggregate properties sum across them using the same released-only semantics, so a
+    year's not-yet-released (``upcoming``) and non-core/expansion (``owned_other``)
+    sets stay out of the totals just as they do per year.
+    """
+
+    from_year: str
+    to_year: str
+    years: list[YearStats] = field(default_factory=list)
+
+    @property
+    def owned_total(self) -> int:
+        """Released core/expansion sets owned across the whole span."""
+        return sum(len(y.owned) for y in self.years)
+
+    @property
+    def release_total(self) -> int:
+        """Released core/expansion sets in the span (owned + missing)."""
+        return sum(y.total for y in self.years)
+
+    @property
+    def pct(self) -> float | None:
+        """Percentage of the span's core/expansion sets owned, or ``None`` if none."""
+        if not self.release_total:
+            return None
+        return 100.0 * self.owned_total / self.release_total
+
+
+def build_range_stats(
+    owned_codes: Iterable[str],
+    all_sets: Iterable[dict[str, Any]],
+    release_sets: Iterable[dict[str, Any]],
+    from_year: int,
+    to_year: int,
+    today: date,
+) -> RangeStats:
+    """Assemble :class:`RangeStats` for ``[from_year, to_year]`` inclusive (pure).
+
+    Delegates each year to :func:`build_year_stats` so the owned/missing/``upcoming``/
+    ``owned_other`` rules live in one place. ``owned_codes``/``all_sets``/``release_sets``
+    are materialized once because each year re-scans them. ``from_year > to_year`` yields
+    an empty span (the CLI validates and rejects this before calling); see the per-year
+    docs for ``all_sets``/``release_sets``/``today`` semantics.
+    """
+    owned_codes = list(owned_codes)
+    all_sets = list(all_sets)
+    release_sets = list(release_sets)
+    years = [
+        build_year_stats(owned_codes, all_sets, release_sets, str(y), today)
+        for y in range(from_year, to_year + 1)
+    ]
+    return RangeStats(from_year=str(from_year), to_year=str(to_year), years=years)
+
+
 # == Collection value (issue #53) ================================================
 
 

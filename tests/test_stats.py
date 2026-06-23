@@ -270,6 +270,54 @@ def test_year_past_years_unaffected_by_today() -> None:
     assert y.total == 2
 
 
+# == year-range breakdown (issue #77) ============================================
+
+
+def test_range_aggregates_across_years() -> None:
+    # 2022 has neo+snc, 2023 has mom. Own neo+mom -> per-year split plus a roll-up.
+    r = stats.build_range_stats(["neo", "mom"], ALL_SETS, RELEASES, 2022, 2023, YEAR_TODAY)
+    assert [y.year for y in r.years] == ["2022", "2023"]  # oldest first
+    assert [r0.code for r0 in r.years[0].owned] == ["neo"]
+    assert [r0.code for r0 in r.years[0].missing] == ["snc"]
+    assert [r0.code for r0 in r.years[1].owned] == ["mom"]
+    # Roll-up: 2 owned of 3 released across the span.
+    assert r.owned_total == 2
+    assert r.release_total == 3
+    assert round(r.pct, 1) == 66.7
+
+
+def test_range_single_year_matches_year_stats() -> None:
+    r = stats.build_range_stats(["neo"], ALL_SETS, RELEASES, 2022, 2022, YEAR_TODAY)
+    assert len(r.years) == 1
+    assert r.owned_total == 1 and r.release_total == 2
+    assert r.pct == 50.0
+
+
+def test_range_includes_years_with_no_releases() -> None:
+    # 1999 contributes a YearStats with an empty total; it doesn't skew the roll-up.
+    r = stats.build_range_stats(["neo"], ALL_SETS, RELEASES, 1999, 2000, YEAR_TODAY)
+    assert [y.year for y in r.years] == ["1999", "2000"]
+    assert all(y.total == 0 for y in r.years)
+    assert r.owned_total == 0 and r.release_total == 0
+    assert r.pct is None  # no divide-by-zero when the span has no releases
+
+
+def test_range_excludes_future_sets_from_totals() -> None:
+    # The 2026 span includes a future set (sos); it must not count toward the total.
+    r = stats.build_range_stats([], SETS_2026, SETS_2026, 2026, 2026, YEAR_TODAY)
+    assert r.release_total == 2  # ecl + tmt are out; sos is upcoming
+    assert [u.code for u in r.years[0].upcoming] == ["sos"]
+    assert r.owned_total == 0
+
+
+def test_range_from_after_to_is_empty() -> None:
+    # The CLI rejects this, but the pure function degrades to an empty span.
+    r = stats.build_range_stats(["neo"], ALL_SETS, RELEASES, 2023, 2022, YEAR_TODAY)
+    assert r.years == []
+    assert r.owned_total == 0 and r.release_total == 0
+    assert r.pct is None
+
+
 # == value (issue #53) ===========================================================
 
 
