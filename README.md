@@ -126,6 +126,8 @@ Then import `exports/moxfield.csv` into Moxfield via your collection's
 | `mtgsets preview <set_code>` | Show the included/excluded breakdown before adding. |
 | `mtgsets add <set_code>` | Mark a set fully owned and generate its card entries. |
 | `mtgsets add-multi <set_code>...` | Add several sets in one run, best-effort per set. |
+| `mtgsets add-card <set_code> <number>` | Add a single card manually (coexists with full sets). |
+| `mtgsets remove-card <set_code> <number>` | Remove manually added single(s) for a printing. |
 | `mtgsets refresh <set_code>` | Re-fetch an owned set from Scryfall and refresh its cached data (prices, etc.). |
 | `mtgsets list` | List owned sets and their generated entry counts. |
 | `mtgsets show <set_code>` | Show one owned set's details and its card-level contents. |
@@ -137,6 +139,9 @@ Useful options:
 
 - `--db-path PATH` — use an alternate database file (all DB commands).
 - `mtgsets remove <set> --yes` / `-y` — skip the confirmation prompt.
+- `mtgsets add-card <set> <number>` accepts `--quantity` / `-q`, `--foil` / `--nonfoil`,
+  `--condition`, and `--language`. Re-adding the same printing and finish stacks onto
+  the existing quantity rather than creating a duplicate row.
 - `mtgsets export moxfield --output PATH` / `-o PATH` — write the CSV elsewhere
   (default `exports/moxfield.csv`).
 
@@ -265,7 +270,7 @@ test suite makes no network calls — the Scryfall API is mocked.
 
 ## Roadmap
 
-The initial CLI is complete: `init`, `search`, `preview`, `add`, `refresh`, `list`,
-`show`, `stats`, `remove`, and `export moxfield`. Planned next: single-card
-`add-card`/`remove-card`, `import-csv`, and `check-deck` (compare a decklist against
-your collection). Feature work is tracked as GitHub issues.
+The initial CLI is complete: `init`, `search`, `preview`, `add`, `add-card`,
+`refresh`, `list`, `show`, `stats`, `remove`, `remove-card`, and `export moxfield`.
+Planned next: `import-csv` and `check-deck` (compare a decklist against your
+collection). Feature work is tracked as GitHub issues.

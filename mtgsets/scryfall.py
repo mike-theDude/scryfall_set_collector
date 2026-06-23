@@ -101,6 +101,15 @@ class ScryfallClient:
         return list(self._paginate("/sets"))
 
     # -- cards ------------------------------------------------------------
+    def get_card(self, set_code: str, collector_number: str) -> dict[str, Any]:
+        """Return one exact printing by set code and collector number.
+
+        Uses ``/cards/:code/:number``, which identifies a single printing
+        unambiguously (the same key Moxfield's Edition + Collector Number use).
+        Raises :class:`ScryfallError` with ``status_code == 404`` if not found.
+        """
+        return self._get(f"/cards/{set_code.lower()}/{collector_number}")
+
     def get_set_cards(self, set_code: str) -> list[dict[str, Any]]:
         """Return every printing in a set, variants included.
 
