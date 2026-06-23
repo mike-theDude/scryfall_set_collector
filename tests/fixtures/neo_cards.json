@@ -1,0 +1,547 @@
+[
+  {
+    "object": "card",
+    "id": "0321b706-87b0-4bea-89d3-ec2e7252dc7c",
+    "oracle_id": "6c7d22e4-2607-4cf5-a939-28361f38f3b6",
+    "multiverse_ids": [],
+    "arena_id": 85634,
+    "name": "A-Ancestral Katana",
+    "lang": "en",
+    "released_at": "2023-01-17",
+    "layout": "normal",
+    "highres_image": false,
+    "image_status": "lowres",
+    "mana_cost": "{1}{W}",
+    "cmc": 2.0,
+    "type_line": "Artifact — Equipment",
+    "oracle_text": "Whenever a Samurai or Warrior you control attacks alone, you may pay {1}. When you do, attach Ancestral Katana to it.\nEquipped creature gets +2/+2 and has \"This creature has first strike as long as it's attacking.\"\nEquip {2} ({2}: Attach to target creature you control. Equip only as a sorcery.)",
+    "colors": [
+      "W"
+    ],
+    "color_identity": [
+      "W"
+    ],
+    "keywords": [
+      "Equip"
+    ],
+    "games": [
+      "arena"
+    ],
+    "reserved": false,
+    "game_changer": false,
+    "foil": false,
+    "nonfoil": true,
+    "finishes": [
+      "nonfoil"
+    ],
+    "oversized": false,
+    "promo": false,
+    "reprint": false,
+    "variation": false,
+    "set_id": "59a2059f-5482-433f-8761-eb2e17859b71",
+    "set": "neo",
+    "set_name": "Kamigawa: Neon Dynasty",
+    "set_type": "expansion",
+    "set_uri": "https://api.scryfall.com/sets/59a2059f-5482-433f-8761-eb2e17859b71",
+    "set_search_uri": "https://api.scryfall.com/cards/search?order=set&q=e%3Aneo&unique=prints",
+    "scryfall_set_uri": "https://scryfall.com/sets/neo?utm_source=api",
+    "prints_search_uri": "https://api.scryfall.com/cards/search?order=released&q=oracleid%3A6c7d22e4-2607-4cf5-a939-28361f38f3b6&unique=prints",
+    "collector_number": "A-1",
+    "digital": true,
+    "rarity": "common",
+    "card_back_id": "0aeebaf5-8c7d-4636-9e82-8c27447861f7",
+    "artist": "Daniel Ljunggren",
+    "artist_ids": [
+      "0fbd4798-76eb-46d5-a5d4-1e3a25870e34"
+    ],
+    "illustration_id": "a9661038-f51e-4122-87d0-e6db65c48720",
+    "border_color": "black",
+    "frame": "2015",
+    "security_stamp": "arena",
+    "full_art": false,
+    "textless": false,
+    "booster": false,
+    "story_spotlight": false,
+    "promo_types": [
+      "rebalanced",
+      "alchemy"
+    ]
+  },
+  {
+    "object": "card",
+    "id": "d9b1ed43-ee6c-43a2-ba94-5bf71c63e070",
+    "oracle_id": "13a9b9fd-20fa-4734-9d95-3ab41ab9c7a0",
+    "multiverse_ids": [
+      548291
+    ],
+    "mtgo_id": 96906,
+    "arena_id": 79418,
+    "tcgplayer_id": 262136,
+    "cardmarket_id": 607153,
+    "name": "Ancestral Katana",
+    "lang": "en",
+    "released_at": "2022-02-18",
+    "layout": "normal",
+    "highres_image": true,
+    "image_status": "highres_scan",
+    "mana_cost": "{1}{W}",
+    "cmc": 2.0,
+    "type_line": "Artifact — Equipment",
+    "oracle_text": "Whenever a Samurai or Warrior you control attacks alone, you may pay {1}. When you do, attach this Equipment to it.\nEquipped creature gets +2/+1.\nEquip {3} ({3}: Attach to target creature you control. Equip only as a sorcery.)",
+    "colors": [
+      "W"
+    ],
+    "color_identity": [
+      "W"
+    ],
+    "keywords": [
+      "Equip"
+    ],
+    "games": [
+      "paper",
+      "mtgo",
+      "arena"
+    ],
+    "reserved": false,
+    "game_changer": false,
+    "foil": true,
+    "nonfoil": true,
+    "finishes": [
+      "nonfoil",
+      "foil"
+    ],
+    "oversized": false,
+    "promo": false,
+    "reprint": false,
+    "variation": false,
+    "set_id": "59a2059f-5482-433f-8761-eb2e17859b71",
+    "set": "neo",
+    "set_name": "Kamigawa: Neon Dynasty",
+    "set_type": "expansion",
+    "set_uri": "https://api.scryfall.com/sets/59a2059f-5482-433f-8761-eb2e17859b71",
+    "set_search_uri": "https://api.scryfall.com/cards/search?order=set&q=e%3Aneo&unique=prints",
+    "scryfall_set_uri": "https://scryfall.com/sets/neo?utm_source=api",
+    "prints_search_uri": "https://api.scryfall.com/cards/search?order=released&q=oracleid%3A13a9b9fd-20fa-4734-9d95-3ab41ab9c7a0&unique=prints",
+    "collector_number": "1",
+    "digital": false,
+    "rarity": "common",
+    "card_back_id": "0aeebaf5-8c7d-4636-9e82-8c27447861f7",
+    "artist": "Daniel Ljunggren",
+    "artist_ids": [
+      "0fbd4798-76eb-46d5-a5d4-1e3a25870e34"
+    ],
+    "illustration_id": "a9661038-f51e-4122-87d0-e6db65c48720",
+    "border_color": "black",
+    "frame": "2015",
+    "full_art": false,
+    "textless": false,
+    "booster": true,
+    "story_spotlight": false,
+    "edhrec_rank": 13136,
+    "penny_rank": 16248
+  },
+  {
+    "object": "card",
+    "id": "8d2c4063-7322-4041-a870-b95598a03e29",
+    "oracle_id": "697ac261-263b-4879-bf45-6d10d23312ae",
+    "multiverse_ids": [
+      548292
+    ],
+    "mtgo_id": 96908,
+    "arena_id": 79419,
+    "tcgplayer_id": 262033,
+    "cardmarket_id": 607027,
+    "name": "Ao, the Dawn Sky",
+    "lang": "en",
+    "released_at": "2022-02-18",
+    "layout": "normal",
+    "highres_image": true,
+    "image_status": "highres_scan",
+    "mana_cost": "{3}{W}{W}",
+    "cmc": 5.0,
+    "type_line": "Legendary Creature — Dragon Spirit",
+    "oracle_text": "Flying, vigilance\nWhen Ao dies, choose one —\n• Look at the top seven cards of your library. Put any number of nonland permanent cards with total mana value 4 or less from among them onto the battlefield. Put the rest on the bottom of your library in a random order.\n• Put two +1/+1 counters on each permanent you control that's a creature or Vehicle.",
+    "power": "5",
+    "toughness": "4",
+    "colors": [
+      "W"
+    ],
+    "color_identity": [
+      "W"
+    ],
+    "keywords": [
+      "Flying",
+      "Vigilance"
+    ],
+    "games": [
+      "paper",
+      "mtgo",
+      "arena"
+    ],
+    "reserved": false,
+    "game_changer": false,
+    "foil": true,
+    "nonfoil": true,
+    "finishes": [
+      "nonfoil",
+      "foil"
+    ],
+    "oversized": false,
+    "promo": false,
+    "reprint": false,
+    "variation": false,
+    "set_id": "59a2059f-5482-433f-8761-eb2e17859b71",
+    "set": "neo",
+    "set_name": "Kamigawa: Neon Dynasty",
+    "set_type": "expansion",
+    "set_uri": "https://api.scryfall.com/sets/59a2059f-5482-433f-8761-eb2e17859b71",
+    "set_search_uri": "https://api.scryfall.com/cards/search?order=set&q=e%3Aneo&unique=prints",
+    "scryfall_set_uri": "https://scryfall.com/sets/neo?utm_source=api",
+    "prints_search_uri": "https://api.scryfall.com/cards/search?order=released&q=oracleid%3A697ac261-263b-4879-bf45-6d10d23312ae&unique=prints",
+    "collector_number": "2",
+    "digital": false,
+    "rarity": "mythic",
+    "card_back_id": "0aeebaf5-8c7d-4636-9e82-8c27447861f7",
+    "artist": "Chris Rahn",
+    "artist_ids": [
+      "7742047e-0f80-4c0f-a530-d07460165e86"
+    ],
+    "illustration_id": "35f1a683-746b-4a06-9614-25a1caaebc33",
+    "border_color": "black",
+    "frame": "2015",
+    "frame_effects": [
+      "legendary"
+    ],
+    "security_stamp": "oval",
+    "full_art": false,
+    "textless": false,
+    "booster": true,
+    "story_spotlight": false,
+    "edhrec_rank": 4218,
+    "penny_rank": 8923
+  },
+  {
+    "object": "card",
+    "id": "8ad44884-ae0d-40ae-87a9-bad043d4e9ad",
+    "oracle_id": "2ee5f5ad-2f16-40d9-831a-2aefece31b36",
+    "multiverse_ids": [
+      548294,
+      548295
+    ],
+    "mtgo_id": 96912,
+    "arena_id": 79421,
+    "tcgplayer_id": 262183,
+    "cardmarket_id": 607052,
+    "name": "Befriending the Moths // Imperial Moth",
+    "lang": "en",
+    "released_at": "2022-02-18",
+    "layout": "transform",
+    "highres_image": true,
+    "image_status": "highres_scan",
+    "cmc": 4.0,
+    "type_line": "Enchantment — Saga // Enchantment Creature — Insect",
+    "color_identity": [
+      "W"
+    ],
+    "keywords": [
+      "Flying",
+      "Transform"
+    ],
+    "card_faces": [
+      {
+        "object": "card_face",
+        "name": "Befriending the Moths",
+        "mana_cost": "{3}{W}",
+        "type_line": "Enchantment — Saga",
+        "oracle_text": "(As this Saga enters and after your draw step, add a lore counter.)\nI, II — Target creature you control gets +1/+1 and gains flying until end of turn.\nIII — Exile this Saga, then return it to the battlefield transformed under your control.",
+        "colors": [
+          "W"
+        ],
+        "artist": "Matt Stewart",
+        "artist_id": "20871267-2d8a-41d5-b03a-be3d557c5734",
+        "illustration_id": "a35ceece-124c-41aa-b9f1-ef95f7d20228"
+      },
+      {
+        "object": "card_face",
+        "name": "Imperial Moth",
+        "mana_cost": "",
+        "type_line": "Enchantment Creature — Insect",
+        "oracle_text": "Flying",
+        "colors": [
+          "W"
+        ],
+        "color_indicator": [
+          "W"
+        ],
+        "power": "2",
+        "toughness": "4",
+        "flavor_text": "\"The moths of Eiganjo were once no different from any other great beast of Kamigawa's wilds. It took years of patience and dedication to convince them to bear riders.\"\n—*History of the Empire*",
+        "artist": "Matt Stewart",
+        "artist_id": "20871267-2d8a-41d5-b03a-be3d557c5734",
+        "illustration_id": "c29c6dd3-47b3-4749-b172-cb68c21d3ccd"
+      }
+    ],
+    "games": [
+      "paper",
+      "mtgo",
+      "arena"
+    ],
+    "reserved": false,
+    "game_changer": false,
+    "foil": true,
+    "nonfoil": true,
+    "finishes": [
+      "nonfoil",
+      "foil"
+    ],
+    "oversized": false,
+    "promo": false,
+    "reprint": false,
+    "variation": false,
+    "set_id": "59a2059f-5482-433f-8761-eb2e17859b71",
+    "set": "neo",
+    "set_name": "Kamigawa: Neon Dynasty",
+    "set_type": "expansion",
+    "set_uri": "https://api.scryfall.com/sets/59a2059f-5482-433f-8761-eb2e17859b71",
+    "set_search_uri": "https://api.scryfall.com/cards/search?order=set&q=e%3Aneo&unique=prints",
+    "scryfall_set_uri": "https://scryfall.com/sets/neo?utm_source=api",
+    "prints_search_uri": "https://api.scryfall.com/cards/search?order=released&q=oracleid%3A2ee5f5ad-2f16-40d9-831a-2aefece31b36&unique=prints",
+    "collector_number": "4",
+    "digital": false,
+    "rarity": "common",
+    "artist": "Matt Stewart",
+    "artist_ids": [
+      "20871267-2d8a-41d5-b03a-be3d557c5734"
+    ],
+    "border_color": "black",
+    "frame": "2015",
+    "frame_effects": [
+      "fandfc",
+      "enchantment"
+    ],
+    "full_art": false,
+    "textless": false,
+    "booster": true,
+    "story_spotlight": false,
+    "edhrec_rank": 16940
+  },
+  {
+    "object": "card",
+    "id": "5fc26aa1-58b9-41b5-95b4-7e9bf2309b54",
+    "oracle_id": "bc71ebf6-2056-41f7-be35-b2e5c34afa99",
+    "multiverse_ids": [
+      553460
+    ],
+    "mtgo_id": 96886,
+    "arena_id": 79723,
+    "tcgplayer_id": 262751,
+    "cardmarket_id": 607375,
+    "name": "Plains",
+    "lang": "en",
+    "released_at": "2022-02-18",
+    "layout": "normal",
+    "highres_image": true,
+    "image_status": "highres_scan",
+    "mana_cost": "",
+    "cmc": 0.0,
+    "type_line": "Basic Land — Plains",
+    "oracle_text": "({T}: Add {W}.)",
+    "colors": [],
+    "color_identity": [
+      "W"
+    ],
+    "keywords": [],
+    "produced_mana": [
+      "W"
+    ],
+    "games": [
+      "paper",
+      "mtgo",
+      "arena"
+    ],
+    "reserved": false,
+    "game_changer": false,
+    "foil": true,
+    "nonfoil": true,
+    "finishes": [
+      "nonfoil",
+      "foil"
+    ],
+    "oversized": false,
+    "promo": false,
+    "reprint": true,
+    "variation": false,
+    "set_id": "59a2059f-5482-433f-8761-eb2e17859b71",
+    "set": "neo",
+    "set_name": "Kamigawa: Neon Dynasty",
+    "set_type": "expansion",
+    "set_uri": "https://api.scryfall.com/sets/59a2059f-5482-433f-8761-eb2e17859b71",
+    "set_search_uri": "https://api.scryfall.com/cards/search?order=set&q=e%3Aneo&unique=prints",
+    "scryfall_set_uri": "https://scryfall.com/sets/neo?utm_source=api",
+    "prints_search_uri": "https://api.scryfall.com/cards/search?order=released&q=oracleid%3Abc71ebf6-2056-41f7-be35-b2e5c34afa99&unique=prints",
+    "collector_number": "283",
+    "digital": false,
+    "rarity": "common",
+    "card_back_id": "0aeebaf5-8c7d-4636-9e82-8c27447861f7",
+    "artist": "Piotr Dura",
+    "artist_ids": [
+      "aff176e8-1d15-432e-ad1d-207a474decba"
+    ],
+    "illustration_id": "11e8f75b-2d51-4368-a279-d16f2d2465a8",
+    "border_color": "black",
+    "frame": "2015",
+    "full_art": false,
+    "textless": false,
+    "booster": true,
+    "story_spotlight": false
+  },
+  {
+    "object": "card",
+    "id": "71327818-2784-4fde-8e19-ef8677694a5f",
+    "oracle_id": "0c7f18d5-36cb-4bc6-a358-443b97666215",
+    "multiverse_ids": [
+      551646
+    ],
+    "arena_id": 79760,
+    "tcgplayer_id": 262044,
+    "cardmarket_id": 606992,
+    "name": "The Wandering Emperor",
+    "lang": "en",
+    "released_at": "2022-02-18",
+    "layout": "normal",
+    "highres_image": true,
+    "image_status": "highres_scan",
+    "mana_cost": "{2}{W}{W}",
+    "cmc": 4.0,
+    "type_line": "Legendary Planeswalker",
+    "oracle_text": "Flash\nAs long as The Wandering Emperor entered this turn, you may activate her loyalty abilities any time you could cast an instant.\n+1: Put a +1/+1 counter on up to one target creature. It gains first strike until end of turn.\n−1: Create a 2/2 white Samurai creature token with vigilance.\n−2: Exile target tapped creature. You gain 2 life.",
+    "loyalty": "3",
+    "colors": [
+      "W"
+    ],
+    "color_identity": [
+      "W"
+    ],
+    "keywords": [
+      "Flash"
+    ],
+    "games": [
+      "paper",
+      "mtgo",
+      "arena"
+    ],
+    "reserved": false,
+    "game_changer": false,
+    "foil": true,
+    "nonfoil": true,
+    "finishes": [
+      "nonfoil",
+      "foil"
+    ],
+    "oversized": false,
+    "promo": false,
+    "reprint": false,
+    "variation": false,
+    "set_id": "59a2059f-5482-433f-8761-eb2e17859b71",
+    "set": "neo",
+    "set_name": "Kamigawa: Neon Dynasty",
+    "set_type": "expansion",
+    "set_uri": "https://api.scryfall.com/sets/59a2059f-5482-433f-8761-eb2e17859b71",
+    "set_search_uri": "https://api.scryfall.com/cards/search?order=set&q=e%3Aneo&unique=prints",
+    "scryfall_set_uri": "https://scryfall.com/sets/neo?utm_source=api",
+    "prints_search_uri": "https://api.scryfall.com/cards/search?order=released&q=oracleid%3A0c7f18d5-36cb-4bc6-a358-443b97666215&unique=prints",
+    "collector_number": "303",
+    "digital": false,
+    "rarity": "mythic",
+    "card_back_id": "0aeebaf5-8c7d-4636-9e82-8c27447861f7",
+    "artist": "Terada Katsuya",
+    "artist_ids": [
+      "d8d6bbd5-36f9-4b5d-aecc-1804be2c6d07"
+    ],
+    "illustration_id": "8200a9d0-e71f-402f-b8c7-5425755c633a",
+    "border_color": "borderless",
+    "frame": "2015",
+    "security_stamp": "oval",
+    "full_art": true,
+    "textless": false,
+    "booster": false,
+    "story_spotlight": false,
+    "promo_types": [
+      "boosterfun"
+    ],
+    "edhrec_rank": 5482
+  },
+  {
+    "object": "card",
+    "id": "dbe6d3be-67b9-45be-a5c8-4edf753a7fd0",
+    "oracle_id": "f9ee4c80-20fb-4322-be02-1c78d37d7a99",
+    "multiverse_ids": [
+      551690
+    ],
+    "tcgplayer_id": 264325,
+    "cardmarket_id": 609600,
+    "name": "Invoke Despair",
+    "lang": "en",
+    "released_at": "2022-02-18",
+    "layout": "normal",
+    "highres_image": true,
+    "image_status": "highres_scan",
+    "mana_cost": "{1}{B}{B}{B}{B}",
+    "cmc": 5.0,
+    "type_line": "Sorcery",
+    "oracle_text": "Target opponent sacrifices a creature of their choice. If they can't, they lose 2 life and you draw a card. Then repeat this process for an enchantment and a planeswalker.",
+    "colors": [
+      "B"
+    ],
+    "color_identity": [
+      "B"
+    ],
+    "keywords": [],
+    "games": [
+      "paper",
+      "mtgo",
+      "arena"
+    ],
+    "reserved": false,
+    "game_changer": false,
+    "foil": true,
+    "nonfoil": false,
+    "finishes": [
+      "foil"
+    ],
+    "oversized": false,
+    "promo": true,
+    "reprint": false,
+    "variation": false,
+    "set_id": "59a2059f-5482-433f-8761-eb2e17859b71",
+    "set": "neo",
+    "set_name": "Kamigawa: Neon Dynasty",
+    "set_type": "expansion",
+    "set_uri": "https://api.scryfall.com/sets/59a2059f-5482-433f-8761-eb2e17859b71",
+    "set_search_uri": "https://api.scryfall.com/cards/search?order=set&q=e%3Aneo&unique=prints",
+    "scryfall_set_uri": "https://scryfall.com/sets/neo?utm_source=api",
+    "prints_search_uri": "https://api.scryfall.com/cards/search?order=released&q=oracleid%3Af9ee4c80-20fb-4322-be02-1c78d37d7a99&unique=prints",
+    "collector_number": "506",
+    "digital": false,
+    "rarity": "rare",
+    "flavor_text": "Although officials said it was a sewer failure, the people whispered that it was a warning of night's reach.",
+    "card_back_id": "0aeebaf5-8c7d-4636-9e82-8c27447861f7",
+    "artist": "Donato Giancola",
+    "artist_ids": [
+      "90332db2-aecb-4d79-917b-95cbeb8d0cb6"
+    ],
+    "illustration_id": "5d2ea84c-1fad-49cd-b480-4a17c29df709",
+    "border_color": "black",
+    "frame": "2015",
+    "security_stamp": "oval",
+    "full_art": false,
+    "textless": false,
+    "booster": false,
+    "story_spotlight": false,
+    "promo_types": [
+      "bundle"
+    ],
+    "edhrec_rank": 8687,
+    "penny_rank": 930
+  }
+]

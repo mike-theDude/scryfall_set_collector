@@ -15,8 +15,19 @@ dependencies = [
     "httpx>=0.27",
 ]
 
+[project.optional-dependencies]
+# Development / test tooling. Install with `pip install -e .[dev]`.
+# HTTP mocking uses stdlib httpx.MockTransport, so no extra dependency is needed.
+dev = [
+    "pytest>=8.0",
+]
+
 [project.scripts]
 mtgsets = "mtgsets.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["mtgsets"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
