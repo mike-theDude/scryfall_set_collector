@@ -403,6 +403,13 @@ def _print_year(y: stats.YearStats) -> None:
                 f"    [red]✗[/red] [cyan]{r.code.upper()}[/cyan] "
                 f"({r.released_at}) — {r.name}"
             )
+    if y.upcoming:
+        console.print("  Upcoming [dim](not released yet)[/dim]:")
+        for r in y.upcoming:
+            console.print(
+                f"    [yellow]…[/yellow] [cyan]{r.code.upper()}[/cyan] "
+                f"({r.released_at}) — {r.name}"
+            )
     if y.owned_other:
         console.print("  Other owned [dim](Commander, Masters, etc.)[/dim]:")
         for r in y.owned_other:
@@ -532,9 +539,10 @@ def stats_command(
                 "(unreachable or [bold]--no-remote[/bold])."
             )
         else:
+            today = datetime.now(timezone.utc).date()
             _print_year(
                 stats.build_year_stats(
-                    owned_codes, all_sets, scryfall.release_sets(all_sets), str(year)
+                    owned_codes, all_sets, scryfall.release_sets(all_sets), str(year), today
                 )
             )
 
