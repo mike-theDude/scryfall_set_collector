@@ -239,9 +239,48 @@ def list_sets(
 
 
 @app.command()
-def remove(set_code: str = typer.Argument(..., help="Set code, e.g. NEO.")) -> None:
-    """Remove an owned set and only its generated entries (issue #9)."""
-    console.print(f"remove {set_code.upper()}: {_TODO}")
+def remove(
+    set_code: str = typer.Argument(..., help="Set code, e.g. NEO."),
+    db_path: Path = typer.Option(db.DB_PATH, "--db-path", help="Database file location."),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
+) -> None:
+    """Remove an owned set and only its generated full-set entries.
+
+    Manual singles and overrides are never touched.
+    """
+    if not Path(db_path).exists():
+        console.print("No collection database yet — nothing to remove.")
+        raise typer.Exit(1)
+
+    code = set_code.strip().lower()
+    display_code = code.upper()
+    conn = db.get_connection(db_path)
+    try:
+        if not db.is_set_owned(conn, code):
+            console.print(
+                f"[yellow]{display_code} is not owned.[/yellow] See "
+                f"[bold]mtgsets list[/bold]."
+            )
+            raise typer.Exit(1)
+
+        count = db.count_full_set_entries(conn, code)
+        if not yes:
+            confirmed = typer.confirm(
+                f"Remove {display_code} and its {count} generated entries? "
+                "(manual singles and overrides are kept)"
+            )
+            if not confirmed:
+                console.print("Aborted.")
+                raise typer.Exit()
+
+        entries_deleted, _ = db.remove_owned_set(conn, code)
+    finally:
+        conn.close()
+
+    console.print(
+        f"[green]Removed[/green] [cyan]{display_code}[/cyan] and "
+        f"[green]{entries_deleted}[/green] generated entries."
+    )
 
 
 export_app = typer.Typer(help="Export the collection.", no_args_is_help=True)

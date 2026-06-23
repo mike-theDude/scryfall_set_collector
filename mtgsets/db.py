@@ -182,6 +182,36 @@ def list_owned_sets(conn: sqlite3.Connection) -> list[sqlite3.Row]:
     ).fetchall()
 
 
+def count_full_set_entries(conn: sqlite3.Connection, set_code: str) -> int:
+    """Return how many generated full-set entries exist for ``set_code``."""
+    return conn.execute(
+        "SELECT COUNT(*) FROM collection_entries "
+        "WHERE source_type = 'full_set' AND source_set_code = ?",
+        (set_code.lower(),),
+    ).fetchone()[0]
+
+
+def remove_owned_set(conn: sqlite3.Connection, set_code: str) -> tuple[int, bool]:
+    """Remove an owned set and ONLY its generated entries.
+
+    Deletes collection_entries with source_type='full_set' and
+    source_set_code=<set>, then the owned_sets row. Manual singles and overrides
+    are never matched by this query (see docs/DESIGN.md). Returns
+    ``(entries_deleted, set_existed)``.
+    """
+    code = set_code.lower()
+    entries_deleted = conn.execute(
+        "DELETE FROM collection_entries "
+        "WHERE source_type = 'full_set' AND source_set_code = ?",
+        (code,),
+    ).rowcount
+    set_existed = (
+        conn.execute("DELETE FROM owned_sets WHERE set_code = ?", (code,)).rowcount > 0
+    )
+    conn.commit()
+    return entries_deleted, set_existed
+
+
 def insert_collection_entries(
     conn: sqlite3.Connection, rows: Iterable[tuple[Any, ...]]
 ) -> int:
