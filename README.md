@@ -78,6 +78,27 @@ Verify it's installed:
 mtgsets --help
 ```
 
+## Updating
+
+`mtgsets` is an editable install, so pulling the latest code is usually all you
+need — the `mtgsets` command runs against your working tree:
+
+```bash
+cd scryfall_set_collector
+git pull
+```
+
+Reinstall only when the packaging changes (new dependencies, or a new/renamed
+command in `pyproject.toml`'s entry points):
+
+```bash
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
+pip install -e .                 # add [dev] if you run the tests/linter
+```
+
+Your collection lives in `data/collection.db` and is never touched by an update.
+After updating, run `mtgsets --help` to confirm the command still works.
+
 ## Usage
 
 Create the local database once, then add the sets you own and export:
