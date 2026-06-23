@@ -360,3 +360,23 @@ def test_stats_year_skipped_with_no_remote(mock_scryfall, db_path) -> None:
     )
     assert result.exit_code == 0, result.output
     assert "2022 sets" in result.output and "needs Scryfall" in result.output
+
+
+def test_stats_year_lists_unreleased_sets_as_upcoming(monkeypatch, db_path) -> None:
+    # A far-future-dated set (issue #57): it must show under Upcoming, never Missing,
+    # and must not count toward the year's owned/total.
+    runner.invoke(app, ["init", "--db-path", str(db_path)])
+    future = {
+        "code": "fut",
+        "name": "Future Expansion",
+        "set_type": "expansion",
+        "digital": False,
+        "released_at": "2099-12-31",
+    }
+    monkeypatch.setattr(scryfall.ScryfallClient, "get_sets", lambda self: [future])
+    result = runner.invoke(app, ["stats", "--year", "2099", "--db-path", str(db_path)])
+    assert result.exit_code == 0, result.output
+    assert "Upcoming" in result.output and "FUT" in result.output
+    assert "Missing:" not in result.output
+    # Nothing is out yet in 2099, so the total is empty.
+    assert "No core/expansion sets released in 2099" in result.output

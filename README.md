@@ -154,7 +154,7 @@ Add flags for deeper breakdowns (or `--all` for everything):
 | `--types` | Owned counts by primary card type (creature/instant/land/…). |
 | `--curve` | Mana-value curve of owned nonland cards. |
 | `--progress` | Newest/oldest set owned, sets behind the latest release, coverage by year, and sets added over time. |
-| `--year <YYYY>` | List the core/expansion sets you **own** vs. those you're **missing** from that release year, with an owned/total count. |
+| `--year <YYYY>` | List the core/expansion sets you **own** vs. those you're **missing** from that release year, with an owned/total count. Only sets released as of today count; ones due later in the year are listed separately as **Upcoming**. |
 | `--value` | Estimated collection value from **live** Scryfall prices, with top cards and sets. |
 | `--all` | Show every section above. |
 | `--no-remote` | Skip Scryfall entirely — composition sections still work; the total-sets, `--progress`, and `--value` sections are omitted. |
@@ -165,16 +165,21 @@ re-fetches current prices, so they need a connection (and are skipped under
 `--no-remote`).
 
 ```
-$ mtgsets stats --year 2023
+$ mtgsets stats --year 2026
 
 Collection stats
 
   Sets owned      1 / 2 core+expansion  (50.0%)
   Card entries    292
 
-2023 sets  0 / 1 owned  (0.0%)
+2026 sets  1 / 3 owned  (33.3%)
+  Owned:
+    ✓ ECL (2026-02-06) — Edge of Eternities
   Missing:
-    ✗ MOM (2023-04-21) — March of the Machine
+    ✗ TMT (2026-04-24) — Through the Mists
+    ✗ SOS (2026-06-12) — Secrets of Strixhaven
+  Upcoming (not released yet):
+    … BLB (2026-09-26) — Bloomburrow II
 ```
 
 ### Example: preview

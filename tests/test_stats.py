@@ -192,12 +192,15 @@ def test_progress_owns_latest_is_zero_behind() -> None:
     assert p.sets_behind == 0
 
 
-# == per-year breakdown (issue #55) ==============================================
+# == per-year breakdown (issues #55, #57) ========================================
+
+# A fixed "today" well after every set in ALL_SETS, so those are all released.
+YEAR_TODAY = date(2026, 6, 23)
 
 
 def test_year_splits_owned_and_missing_core_expansion() -> None:
     # 2022 has neo + snc; owning only neo leaves snc missing.
-    y = stats.build_year_stats(["neo"], ALL_SETS, RELEASES, "2022")
+    y = stats.build_year_stats(["neo"], ALL_SETS, RELEASES, "2022", YEAR_TODAY)
     assert y.year == "2022"
     assert [r.code for r in y.owned] == ["neo"]
     assert [r.code for r in y.missing] == ["snc"]
@@ -207,7 +210,7 @@ def test_year_splits_owned_and_missing_core_expansion() -> None:
 
 def test_year_orders_chronologically() -> None:
     # Own nothing in 2022 -> both sets missing, oldest (neo, Feb) before snc (Apr).
-    y = stats.build_year_stats([], ALL_SETS, RELEASES, "2022")
+    y = stats.build_year_stats([], ALL_SETS, RELEASES, "2022", YEAR_TODAY)
     assert [r.code for r in y.missing] == ["neo", "snc"]
     assert y.owned == []
     assert y.pct == 0.0
@@ -216,7 +219,7 @@ def test_year_orders_chronologically() -> None:
 def test_year_surfaces_owned_other_sets_separately() -> None:
     # cmd is a 2023 Commander deck (outside core/expansion): owned, but listed as
     # "other" rather than counting toward the year's owned/missing totals.
-    y = stats.build_year_stats(["mom", "cmd"], ALL_SETS, RELEASES, "2023")
+    y = stats.build_year_stats(["mom", "cmd"], ALL_SETS, RELEASES, "2023", YEAR_TODAY)
     assert [r.code for r in y.owned] == ["mom"]
     assert y.missing == []
     assert [r.code for r in y.owned_other] == ["cmd"]
@@ -224,15 +227,47 @@ def test_year_surfaces_owned_other_sets_separately() -> None:
 
 
 def test_year_case_insensitive_codes() -> None:
-    y = stats.build_year_stats(["NEO"], ALL_SETS, RELEASES, "2022")
+    y = stats.build_year_stats(["NEO"], ALL_SETS, RELEASES, "2022", YEAR_TODAY)
     assert [r.code for r in y.owned] == ["neo"]
 
 
 def test_year_with_no_releases_has_no_total() -> None:
-    y = stats.build_year_stats(["neo"], ALL_SETS, RELEASES, "1999")
+    y = stats.build_year_stats(["neo"], ALL_SETS, RELEASES, "1999", YEAR_TODAY)
     assert y.total == 0
     assert y.pct is None
     assert y.owned == [] and y.missing == []
+
+
+# -- unreleased / future sets (issue #57) ----------------------------------------
+
+# Three 2026 core/expansion sets: one already out, one out exactly today, one future.
+SETS_2026 = [
+    {"code": "ecl", "name": "Released Set", "released_at": "2026-02-06"},
+    {"code": "tmt", "name": "Out Today", "released_at": "2026-06-23"},
+    {"code": "sos", "name": "Future Set", "released_at": "2026-11-14"},
+]
+
+
+def test_year_excludes_future_sets_from_total_and_missing() -> None:
+    y = stats.build_year_stats([], SETS_2026, SETS_2026, "2026", YEAR_TODAY)
+    # Only ecl + tmt are out as of today; sos is future, so it's not counted.
+    assert [r.code for r in y.missing] == ["ecl", "tmt"]
+    assert y.total == 2
+    assert [r.code for r in y.upcoming] == ["sos"]
+
+
+def test_year_set_released_today_counts_as_released() -> None:
+    y = stats.build_year_stats(["tmt"], SETS_2026, SETS_2026, "2026", YEAR_TODAY)
+    # A set dated exactly today is obtainable -> owned, not upcoming.
+    assert "tmt" in [r.code for r in y.owned]
+    assert "tmt" not in [r.code for r in y.upcoming]
+
+
+def test_year_past_years_unaffected_by_today() -> None:
+    # Every 2022 set is long released, so none land in upcoming regardless of today.
+    y = stats.build_year_stats(["neo"], ALL_SETS, RELEASES, "2022", YEAR_TODAY)
+    assert y.upcoming == []
+    assert y.total == 2
 
 
 # == value (issue #53) ===========================================================

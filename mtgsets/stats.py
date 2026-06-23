@@ -295,20 +295,27 @@ def build_progress(
 
 @dataclass(frozen=True)
 class YearStats:
-    """Owned vs. missing core/expansion sets for a single release year."""
+    """Owned vs. missing core/expansion sets for a single release year.
+
+    "Released" means released as of the ``today`` passed to :func:`build_year_stats`;
+    sets dated later in the year are reported as :attr:`upcoming` and excluded from the
+    owned/missing totals, since they aren't obtainable yet.
+    """
 
     year: str
-    #: Core/expansion sets released that year that are owned, oldest first.
+    #: Released core/expansion sets that year that are owned, oldest first.
     owned: list[SetRef] = field(default_factory=list)
-    #: Core/expansion sets released that year that are not owned, oldest first.
+    #: Released core/expansion sets that year that are not owned, oldest first.
     missing: list[SetRef] = field(default_factory=list)
+    #: Core/expansion sets dated that year but not released yet, oldest first.
+    upcoming: list[SetRef] = field(default_factory=list)
     #: Owned sets from that year outside the core/expansion universe (Commander,
     #: Masters, etc.), surfaced separately like the headline figure does.
     owned_other: list[SetRef] = field(default_factory=list)
 
     @property
     def total(self) -> int:
-        """Core/expansion sets released that year (owned + missing)."""
+        """Released core/expansion sets that year (owned + missing)."""
         return len(self.owned) + len(self.missing)
 
     @property
@@ -329,6 +336,7 @@ def build_year_stats(
     all_sets: Iterable[dict[str, Any]],
     release_sets: Iterable[dict[str, Any]],
     year: str,
+    today: date,
 ) -> YearStats:
     """Assemble :class:`YearStats` for ``year`` (pure).
 
@@ -336,17 +344,23 @@ def build_year_stats(
     set list (used to surface owned non-core/expansion sets from the year); and
     ``release_sets`` is the paper core/expansion universe whose owned/missing split
     drives the headline year figure. A set belongs to a year when its ``released_at``
-    starts with that 4-digit year; undated sets are excluded. Codes are compared
-    case-insensitively.
+    starts with that 4-digit year; undated sets are excluded. ``today`` separates
+    sets already released (``released_at <= today``, counted as owned/missing) from
+    ones still to come (reported as ``upcoming``), so future sets don't inflate the
+    total or read as missing. Codes are compared case-insensitively.
     """
     owned = {c.lower() for c in owned_codes}
+    today_iso = today.isoformat()
 
     release_refs = [_set_ref(s) for s in release_sets]
     release_codes = {r.code for r in release_refs}
     year_releases = [r for r in release_refs if (r.released_at or "")[:4] == year]
 
-    owned_in_year = _by_date(r for r in year_releases if r.code in owned)
-    missing_in_year = _by_date(r for r in year_releases if r.code not in owned)
+    released = [r for r in year_releases if r.released_at <= today_iso]
+    upcoming = _by_date(r for r in year_releases if r.released_at > today_iso)
+
+    owned_in_year = _by_date(r for r in released if r.code in owned)
+    missing_in_year = _by_date(r for r in released if r.code not in owned)
 
     owned_other = _by_date(
         ref
@@ -360,6 +374,7 @@ def build_year_stats(
         year=year,
         owned=owned_in_year,
         missing=missing_in_year,
+        upcoming=upcoming,
         owned_other=owned_other,
     )
 
