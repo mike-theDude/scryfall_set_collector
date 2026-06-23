@@ -290,6 +290,80 @@ def build_progress(
     )
 
 
+# == Per-year set breakdown (issue #55) ==========================================
+
+
+@dataclass(frozen=True)
+class YearStats:
+    """Owned vs. missing core/expansion sets for a single release year."""
+
+    year: str
+    #: Core/expansion sets released that year that are owned, oldest first.
+    owned: list[SetRef] = field(default_factory=list)
+    #: Core/expansion sets released that year that are not owned, oldest first.
+    missing: list[SetRef] = field(default_factory=list)
+    #: Owned sets from that year outside the core/expansion universe (Commander,
+    #: Masters, etc.), surfaced separately like the headline figure does.
+    owned_other: list[SetRef] = field(default_factory=list)
+
+    @property
+    def total(self) -> int:
+        """Core/expansion sets released that year (owned + missing)."""
+        return len(self.owned) + len(self.missing)
+
+    @property
+    def pct(self) -> float | None:
+        """Percentage of the year's core/expansion sets owned, or ``None`` if none."""
+        if not self.total:
+            return None
+        return 100.0 * len(self.owned) / self.total
+
+
+def _by_date(refs: Iterable[SetRef]) -> list[SetRef]:
+    """Sort set refs chronologically (oldest first), ties broken by code."""
+    return sorted(refs, key=lambda r: (r.released_at or "", r.code))
+
+
+def build_year_stats(
+    owned_codes: Iterable[str],
+    all_sets: Iterable[dict[str, Any]],
+    release_sets: Iterable[dict[str, Any]],
+    year: str,
+) -> YearStats:
+    """Assemble :class:`YearStats` for ``year`` (pure).
+
+    ``owned_codes`` are the codes of every owned set; ``all_sets`` is the full Scryfall
+    set list (used to surface owned non-core/expansion sets from the year); and
+    ``release_sets`` is the paper core/expansion universe whose owned/missing split
+    drives the headline year figure. A set belongs to a year when its ``released_at``
+    starts with that 4-digit year; undated sets are excluded. Codes are compared
+    case-insensitively.
+    """
+    owned = {c.lower() for c in owned_codes}
+
+    release_refs = [_set_ref(s) for s in release_sets]
+    release_codes = {r.code for r in release_refs}
+    year_releases = [r for r in release_refs if (r.released_at or "")[:4] == year]
+
+    owned_in_year = _by_date(r for r in year_releases if r.code in owned)
+    missing_in_year = _by_date(r for r in year_releases if r.code not in owned)
+
+    owned_other = _by_date(
+        ref
+        for s in all_sets
+        if (ref := _set_ref(s)).code in owned
+        and ref.code not in release_codes
+        and (ref.released_at or "")[:4] == year
+    )
+
+    return YearStats(
+        year=year,
+        owned=owned_in_year,
+        missing=missing_in_year,
+        owned_other=owned_other,
+    )
+
+
 # == Collection value (issue #53) ================================================
 
 

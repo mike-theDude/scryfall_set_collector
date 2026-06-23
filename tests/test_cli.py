@@ -322,3 +322,41 @@ def test_stats_progress_skipped_with_no_remote(mock_scryfall, db_path) -> None:
     result = runner.invoke(app, ["stats", "--progress", "--no-remote", "--db-path", str(db_path)])
     assert result.exit_code == 0, result.output
     assert "needs Scryfall" in result.output
+
+
+# -- stats --year (issue #55) ----------------------------------------------------
+
+
+def test_stats_year_lists_owned_and_missing(mock_scryfall, db_path) -> None:
+    # Own NEO (2022); the mock knows MOM (2023). 2023 has MOM owned by nobody here.
+    assert add_neo(db_path).exit_code == 0
+    result = runner.invoke(app, ["stats", "--year", "2022", "--db-path", str(db_path)])
+    assert result.exit_code == 0, result.output
+    assert "2022 sets" in result.output
+    assert "1 / 1 owned" in result.output
+    assert "Owned:" in result.output and "NEO" in result.output
+
+
+def test_stats_year_shows_missing_sets(mock_scryfall, db_path) -> None:
+    assert add_neo(db_path).exit_code == 0
+    result = runner.invoke(app, ["stats", "--year", "2023", "--db-path", str(db_path)])
+    assert result.exit_code == 0, result.output
+    assert "2023 sets" in result.output
+    assert "0 / 1 owned" in result.output
+    assert "Missing:" in result.output and "MOM" in result.output
+
+
+def test_stats_year_empty_when_no_releases(mock_scryfall, db_path) -> None:
+    assert add_neo(db_path).exit_code == 0
+    result = runner.invoke(app, ["stats", "--year", "1999", "--db-path", str(db_path)])
+    assert result.exit_code == 0, result.output
+    assert "No core/expansion sets released in 1999" in result.output
+
+
+def test_stats_year_skipped_with_no_remote(mock_scryfall, db_path) -> None:
+    assert add_neo(db_path).exit_code == 0
+    result = runner.invoke(
+        app, ["stats", "--year", "2022", "--no-remote", "--db-path", str(db_path)]
+    )
+    assert result.exit_code == 0, result.output
+    assert "2022 sets" in result.output and "needs Scryfall" in result.output

@@ -381,6 +381,36 @@ def _print_progress(p: stats.ProgressStats) -> None:
         console.print(f"  By year       {years}")
 
 
+def _print_year(y: stats.YearStats) -> None:
+    summary = f"  [green]{len(y.owned)}[/green] / [bold]{y.total}[/bold] owned"
+    if y.pct is not None:
+        summary += f"  [dim]({y.pct:.1f}%)[/dim]"
+    console.print(f"\n[bold]{y.year} sets[/bold]{summary}")
+
+    if not y.total:
+        console.print(f"  [dim]No core/expansion sets released in {y.year}.[/dim]")
+    if y.owned:
+        console.print("  Owned:")
+        for r in y.owned:
+            console.print(
+                f"    [green]✓[/green] [cyan]{r.code.upper()}[/cyan] "
+                f"({r.released_at}) — {r.name}"
+            )
+    if y.missing:
+        console.print("  Missing:")
+        for r in y.missing:
+            console.print(
+                f"    [red]✗[/red] [cyan]{r.code.upper()}[/cyan] "
+                f"({r.released_at}) — {r.name}"
+            )
+    if y.owned_other:
+        console.print("  Other owned [dim](Commander, Masters, etc.)[/dim]:")
+        for r in y.owned_other:
+            console.print(
+                f"    [cyan]{r.code.upper()}[/cyan] ({r.released_at}) — {r.name}"
+            )
+
+
 def _print_value(v: stats.ValueStats) -> None:
     console.print(
         f"\n[bold]Estimated value[/bold]  [green]${v.total_usd:,.2f}[/green]  "
@@ -413,6 +443,9 @@ def stats_command(
     ),
     value: bool = typer.Option(
         False, "--value", help="Estimate collection value from live Scryfall prices."
+    ),
+    year: int | None = typer.Option(
+        None, "--year", help="List owned vs. missing core/expansion sets from a release year."
     ),
     show_all: bool = typer.Option(False, "--all", help="Show every breakdown section."),
 ) -> None:
@@ -490,6 +523,20 @@ def stats_command(
         console.print(f"  Sets owned      [green]{s.owned_total}[/green]")
 
     console.print(f"  Card entries    [green]{card_entries}[/green]")
+
+    # -- per-year breakdown (needs the Scryfall set list) -------------------
+    if year is not None:
+        if all_sets is None:
+            console.print(
+                f"\n[yellow]{year} sets[/yellow] needs Scryfall; skipped "
+                "(unreachable or [bold]--no-remote[/bold])."
+            )
+        else:
+            _print_year(
+                stats.build_year_stats(
+                    owned_codes, all_sets, scryfall.release_sets(all_sets), str(year)
+                )
+            )
 
     if not s.owned_total:
         console.print(
