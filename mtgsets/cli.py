@@ -1264,6 +1264,9 @@ def remove(
                 console.print("Aborted.")
                 raise typer.Exit()
 
+        # Capture before deletion: how many of this set's cards were pushed to Moxfield,
+        # so we can tell the user a manual Moxfield prune is needed (issue #85).
+        exported = db.count_exported_full_set_entries(conn, code)
         entries_deleted, _ = db.remove_owned_set(conn, code)
     finally:
         conn.close()
@@ -1272,6 +1275,13 @@ def remove(
         f"[green]Removed[/green] [cyan]{display_code}[/cyan] and "
         f"[green]{entries_deleted}[/green] generated entries."
     )
+    if exported:
+        console.print(
+            f"\n[yellow]Moxfield sync:[/yellow] {exported} of these card(s) were already "
+            f"exported to Moxfield. A CSV import can't delete them, so to remove them "
+            f"there: filter your collection by the tag [bold]Full Set: {display_code}[/bold] "
+            "and bulk-delete."
+        )
 
 
 export_app = typer.Typer(help="Export the collection.", no_args_is_help=True)

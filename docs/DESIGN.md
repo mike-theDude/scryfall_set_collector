@@ -265,9 +265,10 @@ Override suppression applies in every mode (an overridden `full_set` row is omit
 favour of its `override`).
 
 **Removals don't round-trip.** A CSV import can't delete or decrement, so removing a set
-in mtgsets after exporting it can't pull those cards out of Moxfield. The manual step:
-in Moxfield, filter on the `Full Set: <CODE>` tag and bulk-delete. A dedicated
-removal-sync flow is a separate follow-up.
+in mtgsets after exporting it can't pull those cards out of Moxfield. To help (issue #85),
+`mtgsets remove <CODE>` reports how many of the set's cards were already exported and, if
+any were, tells you to filter on the `Full Set: <CODE>` tag in Moxfield and bulk-delete.
+The deletion is still manual on Moxfield's side.
 
 ---
 
