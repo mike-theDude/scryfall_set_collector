@@ -166,6 +166,9 @@ Useful options:
   `--clear` removes the override and reverts the printing to the full-set default.
 - `mtgsets export moxfield --output PATH` / `-o PATH` — write the CSV elsewhere
   (default `exports/moxfield.csv`).
+- `mtgsets search` and `mtgsets stats` cache Scryfall's full set list locally (24h
+  TTL), so repeated runs are instant and work offline once the cache is warm. Pass
+  `--refresh-sets` to force a re-fetch and refresh the cache.
 
 #### `mtgsets stats`
 

@@ -124,6 +124,22 @@ storage/display and the full JSON object).
 | `booster` | INTEGER | |
 | `full_json` | TEXT | NOT NULL (raw Scryfall object) |
 
+### `scryfall_sets` (cached Scryfall set list)
+
+A local cache of Scryfall's full set list, so `search` and `stats` don't paginate
+~1000 sets over the network on every run (and keep working offline). One row per set;
+all rows share a single `fetched_at` so the cache is an atomic snapshot with one age.
+
+| Column | Type | Notes |
+|---|---|---|
+| `code` | TEXT | PRIMARY KEY (Scryfall set code) |
+| `full_json` | TEXT | NOT NULL (raw Scryfall set object) |
+| `fetched_at` | TEXT | NOT NULL (ISO 8601; when the snapshot was fetched) |
+
+Consumers read the cache when it's younger than the **24h TTL** and re-fetch (replacing
+the whole snapshot) when it's stale, empty, or `--refresh-sets` is passed. If a needed
+re-fetch fails but a stale cache exists, the stale copy is used rather than failing.
+
 ### `collection_entries` (generated card-level entries)
 
 | Column | Type | Notes |
@@ -255,3 +271,7 @@ Excluded count: ___
 Use the [Scryfall API](https://scryfall.com/docs/api). Initially the app can make
 search/API calls by set code. Later it can switch to Scryfall **bulk data** with
 local caching if needed.
+
+The **set list** is already cached locally (`scryfall_sets`, 24h TTL) so `search` and
+`stats` don't re-paginate every set on each run and work offline once warm — see the
+schema above. Per-set card data is still fetched on demand (cached in `cards`).
