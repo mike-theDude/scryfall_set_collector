@@ -151,6 +151,7 @@ run.
 | `mtgsets remove <set_code>` | Remove a set and **only** its generated entries. |
 | `mtgsets import-csv <path>` | Bulk-add cards from a Moxfield-format CSV as manual singles. |
 | `mtgsets export moxfield` | Export the collection as a Moxfield CSV. |
+| `mtgsets export json` | Export the whole collection as a JSON snapshot (backup / scripting). |
 
 Useful options:
 
@@ -167,6 +168,9 @@ Useful options:
   `--clear` removes the override and reverts the printing to the full-set default.
 - `mtgsets export moxfield --output PATH` / `-o PATH` — write the CSV elsewhere
   (default `exports/moxfield.csv`).
+- `mtgsets export json --output PATH` / `-o PATH` — write a full JSON snapshot of the
+  collection (owned sets + every entry, including manual singles and overrides) for
+  backups or scripting (default `exports/collection.json`).
 - `mtgsets search` and `mtgsets stats` cache Scryfall's full set list locally (24h
   TTL), so repeated runs are instant and work offline once the cache is warm. Pass
   `--refresh-sets` to force a re-fetch and refresh the cache.
@@ -316,7 +320,8 @@ test suite makes no network calls — the Scryfall API is mocked.
 
 The initial CLI is complete: `init`, `search`, `preview`, `add`, `add-card`,
 `override-card`, `refresh`, `list`, `show`, `stats`, `remove`, `remove-card`,
-`import-csv`, and `export moxfield`. Feature work is tracked as GitHub issues.
+`import-csv`, and `export moxfield` / `export json`. Feature work is tracked as GitHub
+issues.
 
 ## License
 

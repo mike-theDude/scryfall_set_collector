@@ -239,6 +239,42 @@ quantity rather than duplicating it.
 
 ---
 
+## JSON export
+
+`mtgsets export json` writes a structured snapshot of the whole collection — for
+backups and scripting, where the Moxfield CSV (shaped for re-import) is too lossy. It
+captures the owned sets **and** every card-level entry, including `source_type` and
+`source_set_code`, which the CSV collapses into a `Full Set:` tag.
+
+Output is deterministic: fixed key order, 2-space indent, a trailing newline, and
+`ensure_ascii=False` so non-ASCII card names stay readable. `version` is bumped if the
+shape changes. The same override suppression as the CSV applies (a `full_set` entry
+shadowed by an `override` is omitted), so the snapshot mirrors the real collection.
+
+```json
+{
+  "version": 1,
+  "owned_sets": [
+    { "set_code": "neo", "set_name": "Kamigawa: Neon Dynasty", "added_at": "2024-02-01T00:00:00+00:00" }
+  ],
+  "entries": [
+    {
+      "name": "Boseiju, Who Endures",
+      "set_code": "neo",
+      "collector_number": "266",
+      "quantity": 1,
+      "condition": "Near Mint",
+      "language": "English",
+      "foil": false,
+      "source_type": "full_set",
+      "source_set_code": "neo"
+    }
+  ]
+}
+```
+
+---
+
 ## Preview behavior
 
 `mtgsets preview <set_code>` must show what will be **included** and **excluded**
