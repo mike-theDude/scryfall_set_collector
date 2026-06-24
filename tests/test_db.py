@@ -207,6 +207,16 @@ def test_count_full_set_entries(conn) -> None:
     assert db.count_full_set_entries(conn, "unknown") == 0
 
 
+def test_count_exported_full_set_entries(conn) -> None:
+    seed_owned_full_set(conn)  # two NEO full_set entries, none exported yet
+    assert db.count_exported_full_set_entries(conn, "neo") == 0
+
+    rows = db.get_export_entries(conn)
+    db.mark_entries_exported(conn, [rows[0]["id"]], "2026-06-24T00:00:00+00:00")
+    assert db.count_exported_full_set_entries(conn, "NEO") == 1  # case-insensitive
+    assert db.count_exported_full_set_entries(conn, "mom") == 0  # other set unaffected
+
+
 # -- list_owned_sets --------------------------------------------------------------
 
 

@@ -140,7 +140,8 @@ Escape hatches:
 - `mtgsets export moxfield --set NEO` — re-export just one set on demand.
 
 **Removing a set can't sync to Moxfield automatically** — a CSV import can't delete
-cards. After `mtgsets remove <CODE>`, delete those cards in Moxfield by filtering on the
+cards. When you `mtgsets remove <CODE>` a set you'd already exported, mtgsets reminds you
+how many cards were affected; delete them in Moxfield by filtering on the
 `Full Set: <CODE>` tag and bulk-deleting.
 
 To go the other way — load a stack of individual cards from a spreadsheet (or a

@@ -320,6 +320,20 @@ def count_full_set_entries(conn: sqlite3.Connection, set_code: str) -> int:
     ).fetchone()[0]
 
 
+def count_exported_full_set_entries(conn: sqlite3.Connection, set_code: str) -> int:
+    """Return how many of a set's full-set entries were already exported to Moxfield.
+
+    These are the ``Full Set: <CODE>``-tagged cards that a CSV import pushed into
+    Moxfield and that ``remove`` is about to delete locally — used to tell the user
+    whether a manual Moxfield prune is needed (issue #85). Call before removal.
+    """
+    return conn.execute(
+        "SELECT COUNT(*) FROM collection_entries "
+        "WHERE source_type = 'full_set' AND source_set_code = ? AND exported_at IS NOT NULL",
+        (set_code.lower(),),
+    ).fetchone()[0]
+
+
 def delete_full_set_entries(conn: sqlite3.Connection, set_code: str) -> int:
     """Delete ONLY the generated full-set entries for ``set_code``.
 

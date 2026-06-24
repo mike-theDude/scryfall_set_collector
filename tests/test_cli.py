@@ -1145,3 +1145,43 @@ def test_export_all_and_set_conflict_exits_1(mock_scryfall, db_path, tmp_path) -
     result, _ = moxfield_export(db_path, tmp_path, "--all", "--set", "NEO")
     assert result.exit_code == 1
     assert "not both" in result.output
+
+
+# -- remove: Moxfield prune guidance (issue #85) ---------------------------------
+
+
+def test_remove_warns_to_prune_moxfield_when_exported(mock_scryfall, db_path, tmp_path) -> None:
+    assert add_neo(db_path).exit_code == 0
+    # Push NEO to Moxfield (stamps the 4 entries as exported).
+    assert moxfield_export(db_path, tmp_path)[0].exit_code == 0
+
+    result = runner.invoke(app, ["remove", "NEO", "--db-path", str(db_path), "--yes"])
+    assert result.exit_code == 0, result.output
+    assert "Removed" in result.output
+    # Actionable prune guidance: the exact tag + count + instruction.
+    assert "Moxfield sync" in result.output
+    assert "Full Set: NEO" in result.output
+    assert "4 of these" in result.output
+
+
+def test_remove_no_moxfield_note_when_never_exported(mock_scryfall, db_path) -> None:
+    # NEO owned but never exported -> nothing in Moxfield to prune, so no note.
+    assert add_neo(db_path).exit_code == 0
+    result = runner.invoke(app, ["remove", "NEO", "--db-path", str(db_path), "--yes"])
+    assert result.exit_code == 0, result.output
+    assert "Removed" in result.output
+    assert "Moxfield sync" not in result.output
+
+
+def test_remove_note_only_counts_exported_entries(mock_scryfall, db_path, tmp_path) -> None:
+    # Export only one set; removing the other set warns nothing, removing the
+    # exported one warns. Proves the count is per-set and export-aware.
+    assert add_neo(db_path).exit_code == 0
+    assert runner.invoke(app, ["add", "MOM", "--db-path", str(db_path)]).exit_code == 0
+    # Export just NEO (its 4 entries get stamped); MOM stays un-exported.
+    assert moxfield_export(db_path, tmp_path, "--set", "NEO")[0].exit_code == 0
+
+    mom = runner.invoke(app, ["remove", "MOM", "--db-path", str(db_path), "--yes"])
+    assert mom.exit_code == 0 and "Moxfield sync" not in mom.output
+    neo = runner.invoke(app, ["remove", "NEO", "--db-path", str(db_path), "--yes"])
+    assert neo.exit_code == 0 and "Moxfield sync" in neo.output
