@@ -1306,6 +1306,40 @@ def export_moxfield(
     )
 
 
+@export_app.command("json")
+def export_json(
+    db_path: Path = typer.Option(db.DB_PATH, "--db-path", help="Database file location."),
+    output: Path = typer.Option(
+        Path("exports") / "collection.json", "--output", "-o", help="JSON output path."
+    ),
+) -> None:
+    """Export the whole collection as a JSON snapshot (backup / scripting).
+
+    Captures the owned sets and every card-level entry (full_set, manual, override) in
+    one structured file — more than the Moxfield CSV, which is shaped for re-import.
+    """
+    if not Path(db_path).exists():
+        console.print("No collection database yet. Run [bold]mtgsets add <set>[/bold] first.")
+        raise typer.Exit(1)
+
+    conn = db.get_connection(db_path)
+    try:
+        owned = db.list_owned_sets(conn)
+        entries = db.get_export_entries(conn)
+    finally:
+        conn.close()
+
+    if not owned and not entries:
+        console.print("Nothing to export — the collection is empty.")
+        raise typer.Exit(1)
+
+    written = export.write_collection_json(owned, entries, output)
+    console.print(
+        f"[green]Exported[/green] [green]{written}[/green] cards "
+        f"({len(owned)} set(s)) to [bold]{output}[/bold]."
+    )
+
+
 def main() -> None:
     """Console-script entry point (see pyproject.toml [project.scripts])."""
     app()

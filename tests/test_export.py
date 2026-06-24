@@ -6,6 +6,8 @@ export format can never silently drift from the spec.
 
 from __future__ import annotations
 
+import json
+
 from mtgsets import export
 
 # The canonical header and example data row from docs/DESIGN.md.
@@ -190,3 +192,89 @@ def test_parse_line_numbers_are_data_relative() -> None:
 def test_parse_empty_input_is_empty_list() -> None:
     assert export.parse_moxfield_csv([EXPECTED_HEADER]) == []
     assert export.parse_moxfield_csv([]) == []
+
+
+# -- JSON snapshot (issue #71) ----------------------------------------------------
+
+
+def owned_set(**overrides) -> dict:
+    """A list_owned_sets-shaped owned set record."""
+    row = {
+        "set_code": "neo",
+        "set_name": "Kamigawa: Neon Dynasty",
+        "added_at": "2024-02-01T00:00:00+00:00",
+    }
+    row.update(overrides)
+    return row
+
+
+# The canonical JSON snapshot — one owned set + the DESIGN.md example card, exact bytes.
+EXPECTED_JSON = """\
+{
+  "version": 1,
+  "owned_sets": [
+    {
+      "set_code": "neo",
+      "set_name": "Kamigawa: Neon Dynasty",
+      "added_at": "2024-02-01T00:00:00+00:00"
+    }
+  ],
+  "entries": [
+    {
+      "name": "Boseiju, Who Endures",
+      "set_code": "neo",
+      "collector_number": "266",
+      "quantity": 1,
+      "condition": "Near Mint",
+      "language": "English",
+      "foil": false,
+      "source_type": "full_set",
+      "source_set_code": "neo"
+    }
+  ]
+}
+"""
+
+
+def test_collection_to_json_byte_for_byte() -> None:
+    assert export.collection_to_json([owned_set()], [boseiju_entry()]) == EXPECTED_JSON
+
+
+def test_collection_to_json_foil_is_bool() -> None:
+    doc = json.loads(export.collection_to_json([], [boseiju_entry(foil=1)]))
+    assert doc["entries"][0]["foil"] is True
+    doc = json.loads(export.collection_to_json([], [boseiju_entry(foil=0)]))
+    assert doc["entries"][0]["foil"] is False
+
+
+def test_collection_to_json_lowercases_set_code() -> None:
+    doc = json.loads(export.collection_to_json([], [boseiju_entry(set_code="NEO")]))
+    assert doc["entries"][0]["set_code"] == "neo"
+
+
+def test_collection_to_json_preserves_source_metadata() -> None:
+    # The override/manual tagging the CSV collapses into a tag is kept verbatim.
+    doc = json.loads(
+        export.collection_to_json(
+            [], [boseiju_entry(source_type="override", source_set_code="neo")]
+        )
+    )
+    assert doc["entries"][0]["source_type"] == "override"
+    assert doc["entries"][0]["source_set_code"] == "neo"
+
+
+def test_collection_to_json_empty_is_valid() -> None:
+    text = export.collection_to_json([], [])
+    assert text.endswith("\n")
+    assert json.loads(text) == {"version": 1, "owned_sets": [], "entries": []}
+
+
+def test_write_collection_json_returns_entry_count_and_creates_dirs(tmp_path) -> None:
+    dest = tmp_path / "nested" / "collection.json"
+    count = export.write_collection_json([owned_set()], [boseiju_entry(), boseiju_entry()], dest)
+    assert count == 2
+    assert dest.exists()
+    # File content matches the serializer exactly (trailing newline included).
+    assert dest.read_text(encoding="utf-8") == export.collection_to_json(
+        [owned_set()], [boseiju_entry(), boseiju_entry()]
+    )

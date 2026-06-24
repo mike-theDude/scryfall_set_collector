@@ -9,6 +9,8 @@ no shared global database.
 
 from __future__ import annotations
 
+import json
+
 import httpx
 import pytest
 from typer.testing import CliRunner
@@ -987,3 +989,61 @@ def test_stats_range_skipped_with_no_remote(mock_scryfall, db_path) -> None:
     )
     assert result.exit_code == 0, result.output
     assert "2022–2023 sets" in result.output and "needs Scryfall" in result.output
+
+
+# -- export json (issue #71) -----------------------------------------------------
+
+
+def test_export_json_writes_snapshot(mock_scryfall, db_path, tmp_path) -> None:
+    assert add_neo(db_path).exit_code == 0
+    out = tmp_path / "collection.json"
+    result = runner.invoke(app, ["export", "json", "--db-path", str(db_path), "-o", str(out)])
+    assert result.exit_code == 0, result.output
+    assert "Exported" in result.output and "1 set(s)" in result.output
+    assert out.exists()
+
+    doc = json.loads(out.read_text(encoding="utf-8"))
+    assert doc["version"] == 1
+    assert [s["set_code"] for s in doc["owned_sets"]] == ["neo"]
+    # NEO generates 4 entries from the fixture; all tagged as full_set.
+    assert len(doc["entries"]) == 4
+    assert {e["source_type"] for e in doc["entries"]} == {"full_set"}
+
+
+def test_export_json_includes_manual_and_override(mock_scryfall, db_path, tmp_path) -> None:
+    assert add_neo(db_path).exit_code == 0
+    assert runner.invoke(app, ["add-card", "NEO", "2", "--db-path", str(db_path)]).exit_code == 0
+    assert (
+        runner.invoke(
+            app, ["override-card", "NEO", "2", "--foil", "--db-path", str(db_path)]
+        ).exit_code
+        == 0
+    )
+    out = tmp_path / "collection.json"
+    assert (
+        runner.invoke(app, ["export", "json", "--db-path", str(db_path), "-o", str(out)]).exit_code
+        == 0
+    )
+
+    doc = json.loads(out.read_text(encoding="utf-8"))
+    types = [e["source_type"] for e in doc["entries"]]
+    # 3 untouched full_set + 1 override (full_set #2 suppressed) + 1 manual single.
+    assert types.count("override") == 1
+    assert types.count("manual") == 1
+    assert types.count("full_set") == 3
+
+
+def test_export_json_missing_db_exits_1(db_path) -> None:
+    result = runner.invoke(app, ["export", "json", "--db-path", str(db_path)])
+    assert result.exit_code == 1
+    assert "No collection database" in result.output
+
+
+def test_export_json_empty_collection_exits_1(mock_scryfall, db_path, tmp_path) -> None:
+    assert add_neo(db_path).exit_code == 0
+    runner.invoke(app, ["remove", "NEO", "--db-path", str(db_path), "--yes"])
+    result = runner.invoke(
+        app, ["export", "json", "--db-path", str(db_path), "-o", str(tmp_path / "x.json")]
+    )
+    assert result.exit_code == 1
+    assert "empty" in result.output

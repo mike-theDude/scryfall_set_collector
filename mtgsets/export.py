@@ -1,16 +1,20 @@
-"""Moxfield CSV export and import.
+"""Collection export and import.
 
-Columns and per-entry defaults are specified in docs/DESIGN.md 'Moxfield CSV export'.
-Example row: ``1,0,"Boseiju, Who Endures",NEO,Near Mint,English,,Full Set: NEO,266``
+Each output format keeps all of its column/shape knowledge in this module (a single
+source per format), as specified in docs/DESIGN.md:
 
-The same column knowledge drives both directions: :func:`write_moxfield_csv` emits the
-format and :func:`parse_moxfield_csv` reads it back (issue #61), so an exported
-collection round-trips.
+- **Moxfield CSV** ('Moxfield CSV export'). Example row:
+  ``1,0,"Boseiju, Who Endures",NEO,Near Mint,English,,Full Set: NEO,266``. The same
+  column knowledge drives both directions — :func:`write_moxfield_csv` emits it and
+  :func:`parse_moxfield_csv` reads it back (issue #61), so a collection round-trips.
+- **JSON snapshot** ('JSON export', issue #71). A structured backup of the whole
+  collection (owned sets + every entry) for backups and scripting.
 """
 
 from __future__ import annotations
 
 import csv
+import json
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -137,3 +141,68 @@ def write_moxfield_csv(entries: Iterable[Mapping[str, Any]], dest: Path) -> int:
             writer.writerow(entry_to_row(entry))
             count += 1
     return count
+
+
+# -- JSON snapshot (issue #71) ----------------------------------------------------
+
+#: Bumped if the JSON snapshot shape changes, so a future importer can detect it.
+JSON_SCHEMA_VERSION = 1
+
+
+def _owned_set_to_json(row: Mapping[str, Any]) -> dict[str, Any]:
+    """One owned set as a JSON object: the ownership facts worth preserving."""
+    return {
+        "set_code": row["set_code"],
+        "set_name": row["set_name"],
+        "added_at": row["added_at"],
+    }
+
+
+def _entry_to_json(entry: Mapping[str, Any]) -> dict[str, Any]:
+    """One collection entry as a JSON object (joined card fields + source tagging)."""
+    return {
+        "name": entry["name"],
+        "set_code": (entry["set_code"] or "").lower(),
+        "collector_number": entry["collector_number"],
+        "quantity": entry["quantity"],
+        "condition": entry["condition"],
+        "language": entry["language"],
+        "foil": bool(entry["foil"]),
+        "source_type": entry["source_type"],
+        "source_set_code": entry["source_set_code"],
+    }
+
+
+def collection_to_json(
+    owned_sets: Iterable[Mapping[str, Any]], entries: Iterable[Mapping[str, Any]]
+) -> str:
+    """Serialize the whole collection to a deterministic, pretty-printed JSON string.
+
+    The document is ``{"version", "owned_sets", "entries"}`` — a structured snapshot
+    of what's owned plus every card-level entry (full_set / manual / override, with
+    override suppression already applied upstream). Output is stable (fixed key order,
+    2-space indent, trailing newline) so it diffs cleanly and round-trips byte-for-byte
+    in tests. ``ensure_ascii=False`` keeps non-ASCII card names human-readable.
+    """
+    doc = {
+        "version": JSON_SCHEMA_VERSION,
+        "owned_sets": [_owned_set_to_json(s) for s in owned_sets],
+        "entries": [_entry_to_json(e) for e in entries],
+    }
+    return json.dumps(doc, indent=2, ensure_ascii=False) + "\n"
+
+
+def write_collection_json(
+    owned_sets: Iterable[Mapping[str, Any]],
+    entries: Iterable[Mapping[str, Any]],
+    dest: Path,
+) -> int:
+    """Write the JSON collection snapshot to ``dest``. Returns the number of entries.
+
+    Creates parent dirs as needed, mirroring :func:`write_moxfield_csv`.
+    """
+    entries = list(entries)
+    dest = Path(dest)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_text(collection_to_json(owned_sets, entries), encoding="utf-8")
+    return len(entries)
