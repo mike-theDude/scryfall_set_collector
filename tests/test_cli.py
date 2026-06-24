@@ -282,6 +282,78 @@ def test_refresh_unknown_set_exits_1(mock_scryfall, db_path) -> None:
     assert "No set found" in result.output
 
 
+# -- refresh --all (issue #70) ---------------------------------------------------
+
+
+def test_refresh_all_refreshes_every_owned_set(mock_scryfall, db_path) -> None:
+    assert add_neo(db_path).exit_code == 0
+    assert runner.invoke(app, ["add", "MOM", "--db-path", str(db_path)]).exit_code == 0
+
+    result = runner.invoke(app, ["refresh", "--all", "--db-path", str(db_path)])
+    assert result.exit_code == 0, result.output
+    assert "Refreshed Kamigawa: Neon Dynasty" in result.output
+    assert "Refreshed March of the Machine" in result.output
+    assert "2 refreshed" in result.output
+
+
+def test_refresh_all_continues_past_a_failure(mock_scryfall, db_path) -> None:
+    # A recorded-but-unresolvable set sorted FIRST (newest), then a good set: the
+    # failure must not abort the run, so the good set still refreshes after it.
+    assert add_neo(db_path).exit_code == 0
+    conn = db.get_connection(db_path)
+    db.insert_owned_set(
+        conn, set_code="zzz", set_name="Gone Set", added_at="2099-01-01T00:00:00+00:00"
+    )
+    conn.commit()
+    conn.close()
+
+    result = runner.invoke(app, ["refresh", "--all", "--db-path", str(db_path)])
+    assert result.exit_code == 1  # something failed
+    assert "Failed ZZZ" in result.output
+    assert "Refreshed Kamigawa: Neon Dynasty" in result.output  # ran despite ZZZ failing
+    assert "1 refreshed" in result.output and "1 failed" in result.output
+
+
+def test_refresh_all_preserves_manual_singles(mock_scryfall, db_path, tmp_path) -> None:
+    assert add_neo(db_path).exit_code == 0
+    assert runner.invoke(app, ["add-card", "NEO", "2", "--db-path", str(db_path)]).exit_code == 0
+    assert len(export_lines(db_path, tmp_path)) == 5  # 4 full_set + 1 manual
+
+    result = runner.invoke(app, ["refresh", "--all", "--db-path", str(db_path)])
+    assert result.exit_code == 0, result.output
+    # The manual single survives the bulk refresh (still 5 rows, one untagged).
+    rows = export_lines(db_path, tmp_path)
+    assert len(rows) == 5
+    assert any("Full Set" not in r for r in rows)
+
+
+def test_refresh_all_no_owned_sets_is_friendly(db_path) -> None:
+    runner.invoke(app, ["init", "--db-path", str(db_path)])
+    result = runner.invoke(app, ["refresh", "--all", "--db-path", str(db_path)])
+    assert result.exit_code == 0
+    assert "No owned sets to refresh" in result.output
+
+
+def test_refresh_all_missing_db_exits_1(db_path) -> None:
+    result = runner.invoke(app, ["refresh", "--all", "--db-path", str(db_path)])
+    assert result.exit_code == 1
+    assert "No collection database" in result.output
+
+
+def test_refresh_rejects_set_code_with_all(mock_scryfall, db_path) -> None:
+    assert add_neo(db_path).exit_code == 0
+    result = runner.invoke(app, ["refresh", "NEO", "--all", "--db-path", str(db_path)])
+    assert result.exit_code == 1
+    assert "not both" in result.output
+
+
+def test_refresh_without_set_code_or_all_exits_1(db_path) -> None:
+    runner.invoke(app, ["init", "--db-path", str(db_path)])
+    result = runner.invoke(app, ["refresh", "--db-path", str(db_path)])
+    assert result.exit_code == 1
+    assert "Specify a set code" in result.output
+
+
 def scryfall_owned_row(db_path, code: str, name: str):
     """Insert a bare owned_sets row directly, for guard-path tests."""
     from mtgsets import db as _db

@@ -659,43 +659,34 @@ def import_csv(
         raise typer.Exit(1)
 
 
-@app.command()
-def refresh(
-    set_code: str = typer.Argument(..., help="Set code, e.g. NEO."),
-    db_path: Path = typer.Option(db.DB_PATH, "--db-path", help="Database file location."),
-) -> None:
-    """Re-fetch an owned set from Scryfall and refresh its cached data.
+def _refresh_one_set(conn, code: str) -> str:
+    """Re-fetch one owned set and regenerate its entries in place, best-effort.
 
-    Updates the cached card data (prices, type lines, etc.) and regenerates the
-    set's full-set entries against the current filter rules, so newly added or
-    removed printings are reconciled. Only ``full_set`` entries for this set are
-    touched — manual singles and overrides, and the original ownership date, are
-    preserved.
+    Prints a per-set status line and returns ``"refreshed"``, ``"skipped"``, or
+    ``"failed"`` — it never raises ``typer.Exit``, so a multi-set refresh keeps
+    going when one set fails. Preserves the single-set invariants: only ``full_set``
+    entries for this set are deleted/regenerated, and the ownership row (and its
+    original ``added_at``) is left in place, so manual singles, overrides, and the
+    purchase date all survive.
     """
-    if not Path(db_path).exists():
-        console.print(
-            "No collection database yet. Run [bold]mtgsets init[/bold] and "
-            "[bold]mtgsets add <set>[/bold] first."
-        )
-        raise typer.Exit(1)
-
-    code = set_code.strip().lower()
+    code = code.strip().lower()
     display_code = code.upper()
+    before = db.count_full_set_entries(conn, code)
 
-    conn = db.get_connection(db_path)
+    # -- re-fetch (network boundary) ----------------------------------------
     try:
-        if not db.is_set_owned(conn, code):
+        with scryfall.ScryfallClient() as client:
+            set_obj = client.get_set(code)
+            cards = client.get_set_cards(code)
+    except scryfall.ScryfallError as exc:
+        if exc.status_code == 404:
             console.print(
-                f"[yellow]{display_code} is not owned.[/yellow] Add it with "
-                f"[bold]mtgsets add {display_code}[/bold]."
+                f"[red]Failed {display_code}:[/red] No set found (try [bold]mtgsets search[/bold])."
             )
-            raise typer.Exit(1)
-        before = db.count_full_set_entries(conn, code)
-    finally:
-        conn.close()
+        else:
+            console.print(f"[red]Failed {display_code}:[/red] Scryfall request failed: {exc}")
+        return "failed"
 
-    # -- re-fetch (network boundary); _load_set exits with a message on failure ---
-    set_obj, cards = _load_set(code)
     code = (set_obj.get("code") or code).lower()
     display_code = code.upper()
     set_name = set_obj.get("name", display_code)
@@ -703,26 +694,23 @@ def refresh(
 
     if not breakdown.included_count:
         console.print(
-            f"[yellow]Not refreshed:[/yellow] no cards qualify for the full set of "
-            f"[bold]{display_code}[/bold] (unreleased, or printings don't match the "
-            "full-set rules?). The existing entries were left untouched."
+            f"[yellow]Skipped {display_code}:[/yellow] no cards qualify for the full set "
+            "(unreleased, or printings don't match the full-set rules?). Entries left untouched."
         )
-        raise typer.Exit(1)
+        return "skipped"
 
+    # -- write (own transaction) --------------------------------------------
     entries = collection.generate_full_set_entries(code, breakdown.included)
-    conn = db.get_connection(db_path)
     try:
-        try:
-            cards_written = db.upsert_cards(conn, breakdown.included)
-            db.delete_full_set_entries(conn, code)
-            after = db.insert_collection_entries(conn, (e.as_row() for e in entries))
-            db.update_owned_set_name(conn, code, set_name)
-            conn.commit()
-        except Exception:
-            conn.rollback()
-            raise
-    finally:
-        conn.close()
+        cards_written = db.upsert_cards(conn, breakdown.included)
+        db.delete_full_set_entries(conn, code)
+        after = db.insert_collection_entries(conn, (e.as_row() for e in entries))
+        db.update_owned_set_name(conn, code, set_name)
+        conn.commit()
+    except Exception as exc:
+        conn.rollback()
+        console.print(f"[red]Failed {display_code}:[/red] {exc}")
+        return "failed"
 
     delta = after - before
     if delta:
@@ -735,6 +723,87 @@ def refresh(
         f"[green]{cards_written}[/green] cards cached, [green]{after}[/green] entries"
         f"{change} ([dim]{len(breakdown.main_cards)} main + {len(breakdown.basics)} basics[/dim])."
     )
+    return "refreshed"
+
+
+def _refresh_all(db_path: Path) -> None:
+    """Refresh every owned set, best-effort, then print a summary (mirrors add-multi)."""
+    conn = db.get_connection(db_path)
+    counts = {"refreshed": 0, "skipped": 0, "failed": 0}
+    try:
+        owned = db.list_owned_sets(conn)
+        if not owned:
+            console.print(
+                "[yellow]No owned sets to refresh.[/yellow] Add one with "
+                "[bold]mtgsets add <set>[/bold]."
+            )
+            return
+        for row in owned:
+            counts[_refresh_one_set(conn, row["set_code"])] += 1
+    finally:
+        conn.close()
+
+    summary = ", ".join(f"{counts[k]} {k}" for k in ("refreshed", "skipped", "failed") if counts[k])
+    console.print(f"\n{summary}.")
+    if counts["skipped"] or counts["failed"]:
+        raise typer.Exit(1)
+
+
+@app.command()
+def refresh(
+    set_code: str | None = typer.Argument(None, help="Set code, e.g. NEO. Omit when using --all."),
+    db_path: Path = typer.Option(db.DB_PATH, "--db-path", help="Database file location."),
+    all_sets: bool = typer.Option(
+        False, "--all", help="Refresh every owned set in one run (best-effort)."
+    ),
+) -> None:
+    """Re-fetch an owned set from Scryfall and refresh its cached data.
+
+    Updates the cached card data (prices, type lines, etc.) and regenerates the
+    set's full-set entries against the current filter rules, so newly added or
+    removed printings are reconciled. Only ``full_set`` entries for this set are
+    touched — manual singles and overrides, and the original ownership date, are
+    preserved.
+
+    With ``--all``, every owned set is refreshed best-effort: one set failing doesn't
+    abort the rest, and a ``N refreshed, M skipped, K failed`` summary is printed.
+    """
+    if not Path(db_path).exists():
+        console.print(
+            "No collection database yet. Run [bold]mtgsets init[/bold] and "
+            "[bold]mtgsets add <set>[/bold] first."
+        )
+        raise typer.Exit(1)
+
+    if all_sets:
+        if set_code is not None:
+            console.print("[red]Give a set code or [bold]--all[/bold], not both.[/red]")
+            raise typer.Exit(1)
+        _refresh_all(db_path)
+        return
+
+    if set_code is None:
+        console.print(
+            "[red]Specify a set code, or use [bold]--all[/bold] to refresh every owned set.[/red]"
+        )
+        raise typer.Exit(1)
+
+    code = set_code.strip().lower()
+    display_code = code.upper()
+    conn = db.get_connection(db_path)
+    try:
+        if not db.is_set_owned(conn, code):
+            console.print(
+                f"[yellow]{display_code} is not owned.[/yellow] Add it with "
+                f"[bold]mtgsets add {display_code}[/bold]."
+            )
+            raise typer.Exit(1)
+        status = _refresh_one_set(conn, code)
+    finally:
+        conn.close()
+
+    if status != "refreshed":
+        raise typer.Exit(1)
 
 
 @app.command(name="list")
