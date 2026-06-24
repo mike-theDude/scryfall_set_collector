@@ -370,10 +370,14 @@ def scryfall_owned_row(db_path, code: str, name: str):
 
 
 def export_lines(db_path, tmp_path) -> list[str]:
-    """Export the collection and return the CSV's data rows (no header)."""
+    """Export the FULL collection and return the CSV's data rows (no header).
+
+    Uses ``--all`` so the snapshot reflects the whole collection on every call,
+    independent of the incremental delta state (issue #76).
+    """
     csv_path = tmp_path / "out.csv"
     result = runner.invoke(
-        app, ["export", "moxfield", "--db-path", str(db_path), "-o", str(csv_path)]
+        app, ["export", "moxfield", "--all", "--db-path", str(db_path), "-o", str(csv_path)]
     )
     assert result.exit_code == 0, result.output
     return csv_path.read_text(encoding="utf-8").splitlines()[1:]
@@ -1047,3 +1051,97 @@ def test_export_json_empty_collection_exits_1(mock_scryfall, db_path, tmp_path) 
     )
     assert result.exit_code == 1
     assert "empty" in result.output
+
+
+# -- export moxfield: incremental delta (issue #76) ------------------------------
+
+
+def moxfield_export(db_path, tmp_path, *args):
+    """Run `export moxfield <args>`; return (result, csv_path)."""
+    out = tmp_path / "mox.csv"
+    result = runner.invoke(
+        app, ["export", "moxfield", *args, "--db-path", str(db_path), "-o", str(out)]
+    )
+    return result, out
+
+
+def data_rows(csv_path) -> list[str]:
+    return csv_path.read_text(encoding="utf-8").splitlines()[1:]
+
+
+def test_export_delta_default_then_idempotent(mock_scryfall, db_path, tmp_path) -> None:
+    assert add_neo(db_path).exit_code == 0
+
+    # First default export emits all 4 (none exported yet) and stamps them.
+    result, out = moxfield_export(db_path, tmp_path)
+    assert result.exit_code == 0, result.output
+    assert "Exported" in result.output and "4 new cards" in result.output
+    assert len(data_rows(out)) == 4
+
+    # Immediate rerun finds nothing new (idempotent), exit 0, friendly message.
+    result, _ = moxfield_export(db_path, tmp_path)
+    assert result.exit_code == 0, result.output
+    assert "Nothing new to export" in result.output
+
+
+def test_export_delta_emits_only_new_after_adding_a_set(mock_scryfall, db_path, tmp_path) -> None:
+    assert add_neo(db_path).exit_code == 0
+    assert moxfield_export(db_path, tmp_path)[0].exit_code == 0  # stamps NEO's 4
+
+    assert runner.invoke(app, ["add", "MOM", "--db-path", str(db_path)]).exit_code == 0
+    result, out = moxfield_export(db_path, tmp_path)
+    assert result.exit_code == 0, result.output
+    rows = data_rows(out)
+    # Only MOM's 4 new entries — tagged Full Set: MOM, not NEO.
+    assert len(rows) == 4
+    assert all("Full Set: MOM" in r for r in rows)
+
+
+def test_export_all_redumps_regardless_of_state(mock_scryfall, db_path, tmp_path) -> None:
+    assert add_neo(db_path).exit_code == 0
+    assert moxfield_export(db_path, tmp_path)[0].exit_code == 0  # delta stamps the 4
+
+    result, out = moxfield_export(db_path, tmp_path, "--all")
+    assert result.exit_code == 0, result.output
+    # Full dump even though everything was already exported; "new" not in the message.
+    assert "4 cards" in result.output and "new cards" not in result.output
+    assert len(data_rows(out)) == 4
+
+
+def test_export_set_filter_exports_one_set_on_demand(mock_scryfall, db_path, tmp_path) -> None:
+    assert add_neo(db_path).exit_code == 0
+    assert moxfield_export(db_path, tmp_path)[0].exit_code == 0  # stamp NEO
+
+    # --set re-exports NEO regardless of its exported state.
+    result, out = moxfield_export(db_path, tmp_path, "--set", "NEO")
+    assert result.exit_code == 0, result.output
+    rows = data_rows(out)
+    assert len(rows) == 4
+    assert all("Full Set: NEO" in r for r in rows)
+
+
+def test_export_set_unowned_exits_1(mock_scryfall, db_path, tmp_path) -> None:
+    assert add_neo(db_path).exit_code == 0
+    result, _ = moxfield_export(db_path, tmp_path, "--set", "MOM")
+    assert result.exit_code == 1
+    assert "Nothing to export for MOM" in result.output
+
+
+def test_export_delta_includes_manual_singles(mock_scryfall, db_path, tmp_path) -> None:
+    assert add_neo(db_path).exit_code == 0
+    assert moxfield_export(db_path, tmp_path)[0].exit_code == 0  # stamp the 4 full_set
+
+    # A manual single added afterwards is a brand-new, un-exported entry.
+    assert runner.invoke(app, ["add-card", "NEO", "2", "--db-path", str(db_path)]).exit_code == 0
+    result, out = moxfield_export(db_path, tmp_path)
+    assert result.exit_code == 0, result.output
+    rows = data_rows(out)
+    assert len(rows) == 1  # just the manual single
+    assert "Full Set" not in rows[0]  # manual singles carry no set tag
+
+
+def test_export_all_and_set_conflict_exits_1(mock_scryfall, db_path, tmp_path) -> None:
+    assert add_neo(db_path).exit_code == 0
+    result, _ = moxfield_export(db_path, tmp_path, "--all", "--set", "NEO")
+    assert result.exit_code == 1
+    assert "not both" in result.output
