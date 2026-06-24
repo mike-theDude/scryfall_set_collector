@@ -144,6 +144,7 @@ run.
 | `mtgsets remove-card <set_code> <number>` | Remove manually added single(s) for a printing. |
 | `mtgsets override-card <set_code> <number>` | Correct one full-set printing's condition/quantity/foil/language. |
 | `mtgsets refresh <set_code>` | Re-fetch an owned set from Scryfall and refresh its cached data (prices, etc.). |
+| `mtgsets refresh --all` | Refresh every owned set in one best-effort run (per-set status + summary). |
 | `mtgsets list` | List owned sets and their generated entry counts. |
 | `mtgsets show <set_code>` | Show one owned set's details and its card-level contents. |
 | `mtgsets stats` | Show collection stats — sets owned vs. the total number of sets. |
