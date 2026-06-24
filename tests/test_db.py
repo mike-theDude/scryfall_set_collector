@@ -277,6 +277,110 @@ def test_remove_manual_card_no_match_is_zero(conn) -> None:
     assert db.remove_manual_card(conn, "neo", "999") == (0, 0)
 
 
+# -- overrides: get_full_set_printing / set_override / clear_override --------------
+
+
+def seed_owned_full_set(conn) -> None:
+    """NEO owned as a full set with two generated entries (numbers 1 and 2)."""
+    db.upsert_cards(
+        conn,
+        [
+            make_card("neo-1", set_code="neo", name="NEO One", collector_number="1"),
+            make_card("neo-2", set_code="neo", name="NEO Two", collector_number="2"),
+        ],
+    )
+    db.insert_owned_set(conn, set_code="neo", set_name="Neon Dynasty", added_at="2024-02-01")
+    add_entry(conn, "neo-1", "neo", "full_set", "neo", collector_number="1")
+    add_entry(conn, "neo-2", "neo", "full_set", "neo", collector_number="2")
+    conn.commit()
+
+
+def test_get_full_set_printing_resolves_only_owned_full_set_cards(conn) -> None:
+    seed_owned_full_set(conn)
+    row = db.get_full_set_printing(conn, "NEO", "2")  # case-insensitive
+    assert (row["scryfall_id"], row["set_code"], row["name"]) == ("neo-2", "neo", "NEO Two")
+    # A number that isn't a generated full_set card of NEO resolves to nothing.
+    assert db.get_full_set_printing(conn, "neo", "999") is None
+    assert db.get_full_set_printing(conn, "mom", "1") is None
+
+
+def test_set_override_creates_then_replaces(conn) -> None:
+    seed_owned_full_set(conn)
+    action = db.set_override(
+        conn,
+        scryfall_id="neo-1",
+        set_code="neo",
+        source_set_code="neo",
+        quantity=2,
+        condition="Played",
+        language="Japanese",
+        foil=1,
+    )
+    conn.commit()
+    assert action == "created"
+    # The override coexists with the generated full_set row (both remain).
+    assert entry_signatures(conn) == {
+        ("neo-1", "full_set", "neo"),
+        ("neo-2", "full_set", "neo"),
+        ("neo-1", "override", "neo"),
+    }
+
+    # Re-running REPLACES the values (not stacked) and stays a single override row.
+    action = db.set_override(
+        conn,
+        scryfall_id="neo-1",
+        set_code="neo",
+        source_set_code="neo",
+        quantity=5,
+        condition="Damaged",
+        language="English",
+        foil=0,
+    )
+    conn.commit()
+    assert action == "updated"
+    row = conn.execute(
+        "SELECT quantity, condition, language, foil FROM collection_entries "
+        "WHERE source_type = 'override'"
+    ).fetchone()
+    assert (row["quantity"], row["condition"], row["language"], row["foil"]) == (
+        5,
+        "Damaged",
+        "English",
+        0,
+    )
+
+
+def test_override_survives_refresh_and_remove(conn) -> None:
+    # The whole point: an override is only ever a source_type='override' row, so the
+    # full_set-only refresh and remove paths leave it intact.
+    seed_owned_full_set(conn)
+    db.set_override(conn, scryfall_id="neo-1", set_code="neo", source_set_code="neo", foil=1)
+    conn.commit()
+
+    db.delete_full_set_entries(conn, "neo")  # the refresh half
+    conn.commit()
+    assert entry_signatures(conn) == {("neo-1", "override", "neo")}
+
+    # Re-generate, then a full remove — the override still survives.
+    add_entry(conn, "neo-1", "neo", "full_set", "neo", collector_number="1")
+    db.remove_owned_set(conn, "neo")
+    assert entry_signatures(conn) == {("neo-1", "override", "neo")}
+
+
+def test_clear_override_removes_only_the_override(conn) -> None:
+    seed_owned_full_set(conn)
+    db.set_override(conn, scryfall_id="neo-1", set_code="neo", source_set_code="neo", foil=1)
+    conn.commit()
+
+    assert db.clear_override(conn, "NEO", "1") == 1  # case-insensitive
+    # The generated full_set row is untouched; only the override is gone.
+    assert entry_signatures(conn) == {
+        ("neo-1", "full_set", "neo"),
+        ("neo-2", "full_set", "neo"),
+    }
+    assert db.clear_override(conn, "neo", "1") == 0  # already gone -> no-op
+
+
 # -- get_owned_cards scoping / get_owned_set --------------------------------------
 
 
@@ -350,3 +454,28 @@ def test_get_export_entries_joins_card_fields(conn) -> None:
 
 def test_get_export_entries_empty(conn) -> None:
     assert db.get_export_entries(conn) == []
+
+
+def test_get_export_entries_override_suppresses_full_set_row(conn) -> None:
+    # neo-1 has both a full_set row and an override; neo-2 only a full_set row.
+    seed_owned_full_set(conn)
+    db.set_override(
+        conn,
+        scryfall_id="neo-1",
+        set_code="neo",
+        source_set_code="neo",
+        quantity=3,
+        condition="Played",
+        foil=1,
+    )
+    conn.commit()
+
+    rows = db.get_export_entries(conn)
+    # neo-1 is emitted ONCE — as the override (the full_set row is suppressed).
+    by_number = {(r["set_code"], r["collector_number"]): r for r in rows}
+    assert len(rows) == 2
+    over = by_number[("neo", "1")]
+    assert over["source_type"] == "override"
+    assert (over["quantity"], over["condition"], over["foil"]) == (3, "Played", 1)
+    # neo-2 (no override) still exports as its generated full_set row.
+    assert by_number[("neo", "2")]["source_type"] == "full_set"

@@ -184,11 +184,15 @@ def list_owned_sets(conn: sqlite3.Connection) -> list[sqlite3.Row]:
 
 
 def get_export_entries(conn: sqlite3.Connection) -> list[sqlite3.Row]:
-    """Return every collection entry joined to its cached card, for export.
+    """Return collection entries joined to their cached card, for export.
 
     Ordered by set then collector number (numeric where possible). Exposes the
     card's name/set_code/collector_number alongside the entry's quantity,
     condition, language, foil, source_type and source_set_code.
+
+    A generated ``full_set`` row is **suppressed** when an ``override`` exists for the
+    same ``(scryfall_id, source_set_code)`` — the override carries the corrected
+    values and stands in for it, so the printing is exported once (see docs/DESIGN.md).
     """
     return conn.execute(
         "SELECT c.name, c.set_code, c.collector_number, "
@@ -196,6 +200,11 @@ def get_export_entries(conn: sqlite3.Connection) -> list[sqlite3.Row]:
         "e.source_type, e.source_set_code "
         "FROM collection_entries e "
         "JOIN cards c ON c.scryfall_id = e.scryfall_id "
+        "WHERE NOT (e.source_type = 'full_set' AND EXISTS ("
+        "  SELECT 1 FROM collection_entries o "
+        "  WHERE o.source_type = 'override' "
+        "  AND o.scryfall_id = e.scryfall_id "
+        "  AND o.source_set_code = e.source_set_code)) "
         "ORDER BY c.set_code, "
         "CAST(c.collector_number AS INTEGER), c.collector_number",
     ).fetchall()
@@ -355,6 +364,92 @@ def remove_manual_card(
     conn.execute(f"DELETE FROM collection_entries WHERE id IN ({placeholders})", ids)
     conn.commit()
     return len(ids), quantity_removed
+
+
+def get_full_set_printing(
+    conn: sqlite3.Connection, set_code: str, collector_number: str
+) -> sqlite3.Row | None:
+    """Resolve a printing that's part of an owned full set, by set + number.
+
+    Returns a row exposing ``scryfall_id``, ``set_code`` (the card's printing set) and
+    ``name`` for the ``full_set`` entry of ``set_code`` whose card has this collector
+    number, or None if that set doesn't generate such an entry. Used by ``override-card``
+    to confirm the card is in an owned full set before recording an override against it.
+    """
+    return conn.execute(
+        "SELECT e.scryfall_id AS scryfall_id, c.set_code AS set_code, c.name AS name "
+        "FROM collection_entries e JOIN cards c ON c.scryfall_id = e.scryfall_id "
+        "WHERE e.source_type = 'full_set' AND e.source_set_code = ? "
+        "AND c.collector_number = ?",
+        (set_code.lower(), str(collector_number)),
+    ).fetchone()
+
+
+def set_override(
+    conn: sqlite3.Connection,
+    *,
+    scryfall_id: str,
+    set_code: str,
+    source_set_code: str,
+    quantity: int = 1,
+    condition: str = "Near Mint",
+    language: str = "English",
+    foil: int = 0,
+) -> str:
+    """Create or replace the override for one full-set printing. No commit.
+
+    An override is keyed by ``(scryfall_id, source_set_code)`` — at most one per
+    printing per set. Unlike :func:`add_manual_entry`, re-running **replaces** the
+    stored values instead of stacking, because an override is a correction of the
+    generated row, not an additive single. Returns ``"created"`` or ``"updated"``.
+    """
+    existing = conn.execute(
+        "SELECT id FROM collection_entries "
+        "WHERE source_type = 'override' AND scryfall_id = ? AND source_set_code = ?",
+        (scryfall_id, source_set_code.lower()),
+    ).fetchone()
+    if existing is not None:
+        conn.execute(
+            "UPDATE collection_entries SET quantity = ?, condition = ?, language = ?, "
+            "foil = ? WHERE id = ?",
+            (quantity, condition, language, foil, existing["id"]),
+        )
+        return "updated"
+    conn.execute(
+        "INSERT INTO collection_entries "
+        "(scryfall_id, set_code, quantity, condition, language, foil, "
+        "source_type, source_set_code) "
+        "VALUES (?, ?, ?, ?, ?, ?, 'override', ?)",
+        (
+            scryfall_id,
+            set_code.lower(),
+            quantity,
+            condition,
+            language,
+            foil,
+            source_set_code.lower(),
+        ),
+    )
+    return "created"
+
+
+def clear_override(conn: sqlite3.Connection, set_code: str, collector_number: str) -> int:
+    """Delete the override for a printing (source_type='override' only). Commits.
+
+    Identifies the printing by ``set_code`` (the overriding set's code, matched against
+    ``source_set_code``) + collector number. The generated ``full_set`` row is left
+    intact, so the printing reverts to the full-set defaults. Returns rows deleted.
+    """
+    deleted = conn.execute(
+        "DELETE FROM collection_entries WHERE id IN ("
+        "  SELECT e.id FROM collection_entries e "
+        "  JOIN cards c ON c.scryfall_id = e.scryfall_id "
+        "  WHERE e.source_type = 'override' AND e.source_set_code = ? "
+        "  AND c.collector_number = ?)",
+        (set_code.lower(), str(collector_number)),
+    ).rowcount
+    conn.commit()
+    return deleted
 
 
 def insert_collection_entries(conn: sqlite3.Connection, rows: Iterable[tuple[Any, ...]]) -> int:

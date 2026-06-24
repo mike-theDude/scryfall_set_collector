@@ -142,6 +142,7 @@ run.
 | `mtgsets add-multi <set_code>...` | Add several sets in one run, best-effort per set. |
 | `mtgsets add-card <set_code> <number>` | Add a single card manually (coexists with full sets). |
 | `mtgsets remove-card <set_code> <number>` | Remove manually added single(s) for a printing. |
+| `mtgsets override-card <set_code> <number>` | Correct one full-set printing's condition/quantity/foil/language. |
 | `mtgsets refresh <set_code>` | Re-fetch an owned set from Scryfall and refresh its cached data (prices, etc.). |
 | `mtgsets list` | List owned sets and their generated entry counts. |
 | `mtgsets show <set_code>` | Show one owned set's details and its card-level contents. |
@@ -157,6 +158,12 @@ Useful options:
 - `mtgsets add-card <set> <number>` accepts `--quantity` / `-q`, `--foil` / `--nonfoil`,
   `--condition`, and `--language`. Re-adding the same printing and finish stacks onto
   the existing quantity rather than creating a duplicate row.
+- `mtgsets override-card <set> <number>` corrects a single printing **within an owned
+  full set** when your copy differs from the generated default (one nonfoil, English,
+  Near Mint copy). It takes the same `--quantity` / `-q`, `--foil` / `--nonfoil`,
+  `--condition`, `--language` options; on export the override's values replace the
+  generated row (keeping the `Full Set:` tag), and it survives `refresh`/`remove`.
+  `--clear` removes the override and reverts the printing to the full-set default.
 - `mtgsets export moxfield --output PATH` / `-o PATH` — write the CSV elsewhere
   (default `exports/moxfield.csv`).
 
@@ -304,8 +311,8 @@ test suite makes no network calls — the Scryfall API is mocked.
 ## Roadmap
 
 The initial CLI is complete: `init`, `search`, `preview`, `add`, `add-card`,
-`refresh`, `list`, `show`, `stats`, `remove`, `remove-card`, `import-csv`, and
-`export moxfield`. Feature work is tracked as GitHub issues.
+`override-card`, `refresh`, `list`, `show`, `stats`, `remove`, `remove-card`,
+`import-csv`, and `export moxfield`. Feature work is tracked as GitHub issues.
 
 ## License
 
