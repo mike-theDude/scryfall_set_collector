@@ -16,8 +16,13 @@ from mtgsets.scryfall import ScryfallClient, ScryfallError, match_sets, release_
 
 @pytest.fixture(autouse=True)
 def no_request_delay(monkeypatch):
-    """Drop the politeness sleep so the mocked tests don't actually wait."""
+    """Drop the politeness sleep and retry backoff so mocked tests don't wait.
+
+    Patching ``time.sleep`` to a no-op also keeps the retry tests (which exhaust
+    several attempts) instant without changing the retry logic under test.
+    """
     monkeypatch.setattr(scryfall, "_REQUEST_DELAY", 0.0)
+    monkeypatch.setattr(scryfall.time, "sleep", lambda _seconds: None)
 
 
 def client_for(handler) -> ScryfallClient:
@@ -162,6 +167,96 @@ def test_transport_failure_maps_to_scryfall_error() -> None:
     # Transport failures carry no HTTP status.
     assert excinfo.value.status_code is None
     assert "failed" in str(excinfo.value)
+
+
+# -- retry / backoff on transient failures (issue #69) ---------------------------
+
+
+def flaky_handler(statuses: list[int]):
+    """A handler that returns each status in ``statuses`` on successive calls, then
+    a 200 forever after. Records how many requests it received in ``.calls``."""
+    state = {"i": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        i = state["i"]
+        state["i"] += 1
+        if i < len(statuses):
+            return httpx.Response(statuses[i], json={"details": "transient"})
+        return httpx.Response(200, json={"code": "neo", "name": "Neon Dynasty"})
+
+    handler.calls = state  # type: ignore[attr-defined]
+    return handler
+
+
+def test_retry_recovers_after_429() -> None:
+    handler = flaky_handler([429])
+    with client_for(handler) as client:
+        assert client.get_set("neo")["code"] == "neo"
+    assert handler.calls["i"] == 2  # one 429, then the 200
+
+
+def test_retry_recovers_after_503() -> None:
+    handler = flaky_handler([503])
+    with client_for(handler) as client:
+        assert client.get_set("neo")["code"] == "neo"
+    assert handler.calls["i"] == 2
+
+
+def test_retry_recovers_after_two_transient_failures() -> None:
+    # 429 then 503, then success — uses all three allowed attempts.
+    handler = flaky_handler([429, 503])
+    with client_for(handler) as client:
+        assert client.get_set("neo")["code"] == "neo"
+    assert handler.calls["i"] == 3
+
+
+def test_retry_exhausted_raises_scryfall_error() -> None:
+    handler = flaky_handler([500, 500, 500, 500])  # never recovers
+    with client_for(handler) as client:
+        with pytest.raises(ScryfallError) as excinfo:
+            client.get_set("neo")
+    assert excinfo.value.status_code == 500
+    assert handler.calls["i"] == scryfall._MAX_ATTEMPTS  # bounded, not infinite
+
+
+def test_404_is_not_retried() -> None:
+    handler = flaky_handler([404])
+    with client_for(handler) as client:
+        with pytest.raises(ScryfallError) as excinfo:
+            client.get_set("zzz")
+    assert excinfo.value.status_code == 404
+    assert handler.calls["i"] == 1  # a single attempt, no retry on 4xx
+
+
+def test_retry_wait_honours_numeric_retry_after() -> None:
+    # Retry-After (delta-seconds) wins over the exponential backoff, capped at max.
+    assert scryfall._retry_wait(0, "2") == 2.0
+    assert scryfall._retry_wait(0, str(scryfall._MAX_BACKOFF + 100)) == scryfall._MAX_BACKOFF
+
+
+def test_retry_wait_falls_back_to_exponential_backoff() -> None:
+    # No header (or a non-numeric HTTP-date) -> exponential backoff by attempt.
+    assert scryfall._retry_wait(0, None) == scryfall._RETRY_BACKOFF
+    assert scryfall._retry_wait(1, None) == scryfall._RETRY_BACKOFF * 2
+    assert scryfall._retry_wait(0, "Wed, 21 Oct 2026 07:28:00 GMT") == scryfall._RETRY_BACKOFF
+
+
+def test_retry_after_header_is_used(monkeypatch) -> None:
+    # Verify _get actually reads Retry-After: record the waits it requests.
+    waits: list[float] = []
+    monkeypatch.setattr(scryfall.time, "sleep", lambda s: waits.append(s))
+    state = {"i": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        state["i"] += 1
+        if state["i"] == 1:
+            return httpx.Response(429, headers={"Retry-After": "5"}, json={"details": "slow down"})
+        return httpx.Response(200, json={"code": "neo"})
+
+    with client_for(handler) as client:
+        assert client.get_set("neo")["code"] == "neo"
+    # The politeness delay is 0.0; the one backoff wait came from Retry-After: 5.
+    assert 5.0 in waits
 
 
 # -- get_set / get_sets happy paths ----------------------------------------------

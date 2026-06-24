@@ -6,6 +6,9 @@ calls; bulk data + caching can come later. See docs/DESIGN.md 'Data source notes
 
 Scryfall request etiquette: identify via User-Agent/Accept headers and keep
 50-100ms between requests. https://scryfall.com/docs/api
+
+Transient failures (HTTP 429 and 5xx) are retried with bounded exponential backoff
+(honouring Retry-After); 404 and other 4xx are surfaced immediately. See ``_get``.
 """
 
 from __future__ import annotations
@@ -30,6 +33,13 @@ _HEADERS = {
 #: Scryfall asks for 50-100ms between requests; be polite.
 _REQUEST_DELAY = 0.1
 
+#: Bounded retry on transient failures (issue #69). Total attempts = 1 try + retries.
+_MAX_ATTEMPTS = 3
+#: Base seconds for exponential backoff between retries: 0.5, 1.0, ...
+_RETRY_BACKOFF = 0.5
+#: Hard cap on any single wait, including a server-supplied Retry-After.
+_MAX_BACKOFF = 8.0
+
 
 class ScryfallError(RuntimeError):
     """Raised when the Scryfall API returns an error or is unreachable."""
@@ -37,6 +47,34 @@ class ScryfallError(RuntimeError):
     def __init__(self, message: str, status_code: int | None = None) -> None:
         super().__init__(message)
         self.status_code = status_code
+
+
+def _is_retryable_status(status_code: int) -> bool:
+    """True for transient HTTP statuses worth retrying: 429 and any 5xx."""
+    return status_code == 429 or status_code >= 500
+
+
+def _retry_wait(attempt: int, retry_after: str | None) -> float:
+    """Seconds to wait before the next attempt (0-indexed ``attempt``).
+
+    Honours a numeric ``Retry-After`` header when present; otherwise exponential
+    backoff (``_RETRY_BACKOFF * 2**attempt``). Either way the wait is capped at
+    ``_MAX_BACKOFF``. A non-numeric Retry-After (HTTP-date form) falls back to backoff.
+    """
+    if retry_after:
+        try:
+            return min(float(retry_after), _MAX_BACKOFF)
+        except ValueError:
+            pass
+    return min(_RETRY_BACKOFF * (2**attempt), _MAX_BACKOFF)
+
+
+def _error_detail(resp: httpx.Response) -> str:
+    """Best-effort human-readable detail from a Scryfall error response body."""
+    try:
+        return resp.json().get("details", resp.text)
+    except ValueError:
+        return resp.text
 
 
 class ScryfallClient:
@@ -65,21 +103,33 @@ class ScryfallClient:
 
     # -- low level --------------------------------------------------------
     def _get(self, url: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
-        time.sleep(_REQUEST_DELAY)
-        try:
-            resp = self._client.get(url, params=params)
-        except httpx.HTTPError as exc:
-            raise ScryfallError(f"request to {url} failed: {exc}") from exc
-        if resp.status_code >= 400:
+        """GET a Scryfall JSON endpoint, with bounded retry on transient failures.
+
+        Waits the polite pre-request delay, then issues the request. A ``429`` or
+        ``5xx`` is retried with exponential backoff (honouring ``Retry-After``) up to
+        :data:`_MAX_ATTEMPTS` times; ``404`` and other ``4xx`` are non-retryable and
+        raise :class:`ScryfallError` immediately, as does a final exhausted retry.
+        Connection-level errors raise immediately (a transient blip is out of scope).
+        """
+        for attempt in range(_MAX_ATTEMPTS):
+            time.sleep(_REQUEST_DELAY)
             try:
-                detail = resp.json().get("details", resp.text)
-            except ValueError:
-                detail = resp.text
+                resp = self._client.get(url, params=params)
+            except httpx.HTTPError as exc:
+                raise ScryfallError(f"request to {url} failed: {exc}") from exc
+            if resp.status_code < 400:
+                return resp.json()
+            if _is_retryable_status(resp.status_code) and attempt + 1 < _MAX_ATTEMPTS:
+                time.sleep(_retry_wait(attempt, resp.headers.get("Retry-After")))
+                continue
             raise ScryfallError(
-                f"Scryfall {resp.status_code} for {url}: {detail}",
+                f"Scryfall {resp.status_code} for {url}: {_error_detail(resp)}",
                 status_code=resp.status_code,
             )
-        return resp.json()
+        # The final retryable attempt raises above, so the loop never falls through.
+        raise AssertionError(
+            "unreachable: retry loop exited without return/raise"
+        )  # pragma: no cover
 
     def _paginate(self, url: str, params: dict[str, Any] | None = None) -> Iterator[dict[str, Any]]:
         """Yield every item across a paginated Scryfall list response."""
