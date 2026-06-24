@@ -377,6 +377,92 @@ def test_remove_card_missing_db_exits_1(db_path) -> None:
     assert "nothing to remove" in result.output
 
 
+# -- override-card ---------------------------------------------------------------
+
+
+def test_override_card_replaces_full_set_values_on_export(mock_scryfall, db_path, tmp_path) -> None:
+    # NEO #2 ("Ao, the Dawn Sky") is part of the owned full set; override it.
+    assert add_neo(db_path).exit_code == 0
+    result = runner.invoke(
+        app,
+        [
+            "override-card",
+            "NEO",
+            "2",
+            "-q",
+            "3",
+            "--foil",
+            "--condition",
+            "Played",
+            "--db-path",
+            str(db_path),
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert "Set override" in result.output and "Ao, the Dawn Sky" in result.output
+
+    # Still 4 exported rows (no duplicate) — but #2 now carries the override values
+    # and keeps its Full Set tag.
+    rows = export_lines(db_path, tmp_path)
+    assert len(rows) == 4
+    ao = next(r for r in rows if "Ao, the Dawn Sky" in r)
+    assert ao.startswith("3,")  # Count
+    assert "foil" in ao and "Played" in ao and "Full Set: NEO" in ao
+
+
+def test_override_card_rerun_updates(mock_scryfall, db_path) -> None:
+    assert add_neo(db_path).exit_code == 0
+    assert (
+        runner.invoke(
+            app, ["override-card", "NEO", "2", "--foil", "--db-path", str(db_path)]
+        ).exit_code
+        == 0
+    )
+    result = runner.invoke(app, ["override-card", "NEO", "2", "-q", "5", "--db-path", str(db_path)])
+    assert result.exit_code == 0, result.output
+    assert "Updated override" in result.output
+
+
+def test_override_card_clear_reverts_to_defaults(mock_scryfall, db_path, tmp_path) -> None:
+    assert add_neo(db_path).exit_code == 0
+    assert (
+        runner.invoke(
+            app, ["override-card", "NEO", "2", "--foil", "--db-path", str(db_path)]
+        ).exit_code
+        == 0
+    )
+
+    result = runner.invoke(app, ["override-card", "NEO", "2", "--clear", "--db-path", str(db_path)])
+    assert result.exit_code == 0, result.output
+    assert "Cleared" in result.output
+
+    # Back to the generated defaults: 4 rows, #2 nonfoil again.
+    rows = export_lines(db_path, tmp_path)
+    assert len(rows) == 4
+    ao = next(r for r in rows if "Ao, the Dawn Sky" in r)
+    assert "foil" not in ao
+
+    # Clearing again is a no-op that reports nothing to clear.
+    again = runner.invoke(app, ["override-card", "NEO", "2", "--clear", "--db-path", str(db_path)])
+    assert again.exit_code == 1
+    assert "No override found" in again.output
+
+
+def test_override_card_not_in_full_set_exits_1(mock_scryfall, db_path) -> None:
+    # The DB exists (a manual single was added) but NEO is not owned as a full set,
+    # so #2 has no generated full_set entry to override.
+    assert runner.invoke(app, ["add-card", "NEO", "2", "--db-path", str(db_path)]).exit_code == 0
+    result = runner.invoke(app, ["override-card", "NEO", "2", "--db-path", str(db_path)])
+    assert result.exit_code == 1
+    assert "isn't part of an owned full set" in result.output
+
+
+def test_override_card_missing_db_exits_1(db_path) -> None:
+    result = runner.invoke(app, ["override-card", "NEO", "2", "--db-path", str(db_path)])
+    assert result.exit_code == 1
+    assert "No collection database yet" in result.output
+
+
 # -- import-csv ------------------------------------------------------------------
 
 MOX_HEADER = "Count,Tradelist Count,Name,Edition,Condition,Language,Foil,Tags,Collector Number"

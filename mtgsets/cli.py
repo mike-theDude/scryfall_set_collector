@@ -403,6 +403,90 @@ def remove_card(
     )
 
 
+@app.command(name="override-card")
+def override_card(
+    set_code: str = typer.Argument(..., help="Set code of the owned full set, e.g. NEO."),
+    collector_number: str = typer.Argument(..., help="Collector number within the set, e.g. 266."),
+    db_path: Path = typer.Option(db.DB_PATH, "--db-path", help="Database file location."),
+    quantity: int = typer.Option(1, "--quantity", "-q", min=1, help="How many copies you have."),
+    foil: bool = typer.Option(False, "--foil/--nonfoil", help="Your copy is foil."),
+    condition: str = typer.Option("Near Mint", "--condition", help="Your copy's condition."),
+    language: str = typer.Option("English", "--language", help="Your copy's language."),
+    clear: bool = typer.Option(
+        False, "--clear", help="Remove the override and revert to full-set defaults."
+    ),
+) -> None:
+    """Correct one printing's details within an owned full set (source_type=override).
+
+    A full set generates one nonfoil, English, Near Mint, quantity-1 entry per card.
+    Use this when *your* copy of a single printing differs — it's foil, played, a
+    different language, or you have several. The card must already be part of an owned
+    full set (resolved from the local cache; no Scryfall call). The override replaces
+    the generated row's values on export and survives ``refresh``/``remove``. Re-running
+    replaces the override; ``--clear`` deletes it.
+    """
+    if not Path(db_path).exists():
+        console.print(
+            "No collection database yet. Add a set with [bold]mtgsets add <set>[/bold] first."
+        )
+        raise typer.Exit(1)
+
+    code = set_code.strip().lower()
+    display_code = code.upper()
+    number = collector_number.strip()
+
+    conn = db.get_connection(db_path)
+    try:
+        if clear:
+            deleted = db.clear_override(conn, code, number)
+            if not deleted:
+                console.print(
+                    f"[yellow]No override found[/yellow] for [bold]{display_code} {number}[/bold]."
+                )
+                raise typer.Exit(1)
+            console.print(
+                f"[green]Cleared[/green] override for [cyan]{display_code}[/cyan] {number} — "
+                "reverted to full-set defaults."
+            )
+            return
+
+        printing = db.get_full_set_printing(conn, code, number)
+        if printing is None:
+            console.print(
+                f"[yellow]{display_code} {number} isn't part of an owned full set[/yellow], so "
+                "there's nothing to override. Add the set with "
+                f"[bold]mtgsets add {display_code}[/bold], or track a one-off copy with "
+                f"[bold]mtgsets add-card {display_code} {number}[/bold]."
+            )
+            raise typer.Exit(1)
+
+        try:
+            action = db.set_override(
+                conn,
+                scryfall_id=printing["scryfall_id"],
+                set_code=printing["set_code"],
+                source_set_code=code,
+                quantity=quantity,
+                condition=condition,
+                language=language,
+                foil=int(foil),
+            )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+    finally:
+        conn.close()
+
+    finish = "foil" if foil else "nonfoil"
+    verb = "Set" if action == "created" else "Updated"
+    console.print(
+        f"[green]{verb}[/green] override: [bold]{printing['name']}[/bold] "
+        f"([cyan]{display_code}[/cyan] {number}) — "
+        f"{quantity}x {condition}, {language}, {finish}."
+    )
+
+
 @app.command(name="import-csv")
 def import_csv(
     path: Path = typer.Argument(..., help="Path to a Moxfield-format CSV."),
