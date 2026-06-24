@@ -117,6 +117,32 @@ mtgsets export moxfield      # write exports/moxfield.csv
 Then import `exports/moxfield.csv` into Moxfield via your collection's
 **Import** option.
 
+### Incremental export (avoid duplicate re-imports)
+
+Moxfield's import is **additive** — re-importing a card stacks its quantity. So
+`export moxfield` is a **delta by default**: it writes only the entries you haven't
+exported yet and marks them exported on success. The intended long-term workflow is to
+keep adding sets to mtgsets over time and push just the new cards:
+
+```bash
+mtgsets add NEO
+mtgsets export moxfield        # writes NEO's cards, marks them exported
+# ...later...
+mtgsets add MOM
+mtgsets export moxfield        # writes only MOM's cards (NEO isn't re-emitted)
+```
+
+A second export with nothing new prints "nothing new to export" and writes no file.
+Escape hatches:
+
+- `mtgsets export moxfield --all` — write the **whole** collection (first import, or
+  rebuilding a wiped Moxfield library).
+- `mtgsets export moxfield --set NEO` — re-export just one set on demand.
+
+**Removing a set can't sync to Moxfield automatically** — a CSV import can't delete
+cards. After `mtgsets remove <CODE>`, delete those cards in Moxfield by filtering on the
+`Full Set: <CODE>` tag and bulk-deleting.
+
 To go the other way — load a stack of individual cards from a spreadsheet (or a
 Moxfield export) — use `import-csv`. It reads the same columns `export moxfield`
 emits, so a collection round-trips:

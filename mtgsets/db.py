@@ -54,6 +54,7 @@ CREATE TABLE IF NOT EXISTS collection_entries (
     foil            INTEGER NOT NULL DEFAULT 0,
     source_type     TEXT NOT NULL,
     source_set_code TEXT,
+    exported_at     TEXT,
     FOREIGN KEY (scryfall_id) REFERENCES cards(scryfall_id)
 );
 
@@ -73,11 +74,31 @@ CREATE TABLE IF NOT EXISTS scryfall_sets (
 
 
 def get_connection(db_path: Path = DB_PATH) -> sqlite3.Connection:
-    """Open a SQLite connection with name-based row access and FK enforcement on."""
+    """Open a SQLite connection with name-based row access and FK enforcement on.
+
+    Also applies idempotent column migrations (:func:`_migrate`) so a database created
+    before a column existed is brought up to date — not every command runs ``init_db``,
+    so the connection itself is the safe choke point.
+    """
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
+    _migrate(conn)
     return conn
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    """Apply lightweight, idempotent schema migrations to an existing database.
+
+    New databases get everything from :data:`SCHEMA`; this only patches *older* ones.
+    Currently: add ``collection_entries.exported_at`` (issue #76) when missing. No-ops
+    once the column exists, and skips the table when it doesn't exist yet (e.g. during
+    initial creation, before ``init_db`` has run the schema).
+    """
+    cols = {row["name"] for row in conn.execute("PRAGMA table_info(collection_entries)")}
+    if cols and "exported_at" not in cols:
+        conn.execute("ALTER TABLE collection_entries ADD COLUMN exported_at TEXT")
+        conn.commit()
 
 
 def init_db(db_path: Path = DB_PATH) -> bool:
@@ -191,31 +212,66 @@ def list_owned_sets(conn: sqlite3.Connection) -> list[sqlite3.Row]:
     ).fetchall()
 
 
-def get_export_entries(conn: sqlite3.Connection) -> list[sqlite3.Row]:
+def get_export_entries(
+    conn: sqlite3.Connection,
+    *,
+    unexported_only: bool = False,
+    source_set_code: str | None = None,
+) -> list[sqlite3.Row]:
     """Return collection entries joined to their cached card, for export.
 
-    Ordered by set then collector number (numeric where possible). Exposes the
-    card's name/set_code/collector_number alongside the entry's quantity,
-    condition, language, foil, source_type and source_set_code.
+    Ordered by set then collector number (numeric where possible). Exposes each entry's
+    ``id`` (so the caller can stamp it as exported) plus the card's
+    name/set_code/collector_number and the entry's quantity, condition, language, foil,
+    source_type and source_set_code.
 
     A generated ``full_set`` row is **suppressed** when an ``override`` exists for the
     same ``(scryfall_id, source_set_code)`` — the override carries the corrected
     values and stands in for it, so the printing is exported once (see docs/DESIGN.md).
+
+    Filters for the incremental export (issue #76):
+
+    - ``unexported_only`` restricts to entries not yet exported (``exported_at IS NULL``)
+      — the delta default.
+    - ``source_set_code`` restricts to one set's entries regardless of export state.
     """
-    return conn.execute(
-        "SELECT c.name, c.set_code, c.collector_number, "
-        "e.quantity, e.condition, e.language, e.foil, "
-        "e.source_type, e.source_set_code "
-        "FROM collection_entries e "
-        "JOIN cards c ON c.scryfall_id = e.scryfall_id "
-        "WHERE NOT (e.source_type = 'full_set' AND EXISTS ("
-        "  SELECT 1 FROM collection_entries o "
-        "  WHERE o.source_type = 'override' "
-        "  AND o.scryfall_id = e.scryfall_id "
-        "  AND o.source_set_code = e.source_set_code)) "
-        "ORDER BY c.set_code, "
-        "CAST(c.collector_number AS INTEGER), c.collector_number",
-    ).fetchall()
+    sql = [
+        "SELECT e.id, c.name, c.set_code, c.collector_number, ",
+        "e.quantity, e.condition, e.language, e.foil, ",
+        "e.source_type, e.source_set_code ",
+        "FROM collection_entries e ",
+        "JOIN cards c ON c.scryfall_id = e.scryfall_id ",
+        "WHERE NOT (e.source_type = 'full_set' AND EXISTS (",
+        "  SELECT 1 FROM collection_entries o ",
+        "  WHERE o.source_type = 'override' ",
+        "  AND o.scryfall_id = e.scryfall_id ",
+        "  AND o.source_set_code = e.source_set_code)) ",
+    ]
+    params: list[Any] = []
+    if unexported_only:
+        sql.append("AND e.exported_at IS NULL ")
+    if source_set_code is not None:
+        sql.append("AND e.source_set_code = ? ")
+        params.append(source_set_code.lower())
+    sql.append("ORDER BY c.set_code, CAST(c.collector_number AS INTEGER), c.collector_number")
+    return conn.execute("".join(sql), params).fetchall()
+
+
+def mark_entries_exported(conn: sqlite3.Connection, ids: list[int], exported_at: str) -> int:
+    """Stamp the given collection_entries as exported at ``exported_at``. Commits.
+
+    Called after a successful Moxfield write so a delta export is idempotent — the same
+    rows won't re-export next run. Returns the number of rows stamped (0 for empty ids).
+    """
+    if not ids:
+        return 0
+    placeholders = ",".join("?" * len(ids))
+    conn.execute(
+        f"UPDATE collection_entries SET exported_at = ? WHERE id IN ({placeholders})",
+        [exported_at, *ids],
+    )
+    conn.commit()
+    return len(ids)
 
 
 def get_owned_cards(

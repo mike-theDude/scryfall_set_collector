@@ -481,6 +481,61 @@ def test_get_export_entries_override_suppresses_full_set_row(conn) -> None:
     assert by_number[("neo", "2")]["source_type"] == "full_set"
 
 
+# -- incremental export: exported_at delta (issue #76) ----------------------------
+
+
+def test_migrate_adds_exported_at_to_older_db(tmp_path) -> None:
+    # An old database created before the column existed must be patched on open.
+    path = tmp_path / "old.db"
+    raw = sqlite3.connect(path)
+    raw.executescript(
+        "CREATE TABLE cards (scryfall_id TEXT PRIMARY KEY, full_json TEXT NOT NULL);"
+        "CREATE TABLE collection_entries ("
+        " id INTEGER PRIMARY KEY AUTOINCREMENT, scryfall_id TEXT, set_code TEXT, "
+        " quantity INTEGER, condition TEXT, language TEXT, foil INTEGER, "
+        " source_type TEXT NOT NULL, source_set_code TEXT);"
+    )
+    raw.commit()
+    raw.close()
+
+    conn = db.get_connection(path)  # opening migrates it
+    try:
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(collection_entries)")}
+    finally:
+        conn.close()
+    assert "exported_at" in cols
+
+
+def test_get_export_entries_unexported_only_and_marking(conn) -> None:
+    seed_owned_full_set(conn)  # two full_set entries, both never exported
+    rows = db.get_export_entries(conn, unexported_only=True)
+    assert len(rows) == 2
+    ids = [r["id"] for r in rows]
+
+    # Stamp one: only the other is "new" now; a full export still returns both.
+    assert db.mark_entries_exported(conn, [ids[0]], "2026-06-24T00:00:00+00:00") == 1
+    assert [r["id"] for r in db.get_export_entries(conn, unexported_only=True)] == [ids[1]]
+    assert len(db.get_export_entries(conn)) == 2
+
+    # Stamp the rest -> nothing new; empty id list is a no-op.
+    db.mark_entries_exported(conn, [ids[1]], "2026-06-24T00:00:00+00:00")
+    assert db.get_export_entries(conn, unexported_only=True) == []
+    assert db.mark_entries_exported(conn, [], "2026-06-24T00:00:00+00:00") == 0
+
+
+def test_get_export_entries_by_set_scopes_to_one_set(conn) -> None:
+    # neo full_set x2 + override(neo) + manual(no set) + mom full_set.
+    seed_removal_scenario(conn)
+    neo = db.get_export_entries(conn, source_set_code="NEO")  # case-insensitive
+    sigs = {(r["source_type"], r["source_set_code"]) for r in neo}
+    # The set's full_set rows AND its override are included; the manual single
+    # (source_set_code NULL) and MOM's entry are not.
+    assert ("full_set", "neo") in sigs
+    assert ("override", "neo") in sigs
+    assert all(r["source_set_code"] == "neo" for r in neo)
+    assert all("mom" != r["source_set_code"] for r in neo)
+
+
 # -- scryfall_sets cache (issue #68) ----------------------------------------------
 
 

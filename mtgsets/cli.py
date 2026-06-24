@@ -1284,25 +1284,77 @@ def export_moxfield(
     output: Path = typer.Option(
         Path("exports") / "moxfield.csv", "--output", "-o", help="CSV output path."
     ),
+    all_entries: bool = typer.Option(
+        False,
+        "--all",
+        help="Export the whole collection, not just entries new since the last export.",
+    ),
+    set_code: str | None = typer.Option(
+        None, "--set", help="Export only this set's entries, regardless of export state."
+    ),
 ) -> None:
-    """Export the collection as a Moxfield-importable CSV."""
+    """Export the collection as a Moxfield-importable CSV.
+
+    Moxfield's collection import is **additive** (re-importing a card stacks its
+    quantity), so this is a **delta by default**: only entries not yet exported are
+    written, and they're stamped as exported on success — so after adding more sets you
+    can re-run and push just the new cards without doubling what's already in Moxfield.
+
+    Escape hatches: ``--all`` writes the whole collection (first import, or rebuilding a
+    wiped Moxfield library); ``--set <CODE>`` re-exports just one set's entries on
+    demand. Both stamp the rows they emit.
+
+    Note: removals can't round-trip through a CSV import — if you remove a set in mtgsets
+    after exporting it, delete those cards in Moxfield by filtering on the
+    ``Full Set: <CODE>`` tag.
+    """
     if not Path(db_path).exists():
         console.print("No collection database yet. Run [bold]mtgsets add <set>[/bold] first.")
+        raise typer.Exit(1)
+    if all_entries and set_code is not None:
+        console.print("[red]Use either [bold]--all[/bold] or [bold]--set[/bold], not both.[/red]")
         raise typer.Exit(1)
 
     conn = db.get_connection(db_path)
     try:
-        entries = db.get_export_entries(conn)
+        if set_code is not None:
+            code = set_code.strip().lower()
+            entries = db.get_export_entries(conn, source_set_code=code)
+            if not entries:
+                console.print(
+                    f"Nothing to export for [cyan]{code.upper()}[/cyan] — no entries for that "
+                    "set (is it owned?)."
+                )
+                raise typer.Exit(1)
+        elif all_entries:
+            entries = db.get_export_entries(conn)
+            if not entries:
+                console.print("Nothing to export — the collection is empty.")
+                raise typer.Exit(1)
+        else:
+            entries = db.get_export_entries(conn, unexported_only=True)
+            if not entries:
+                # Distinguish a genuinely empty collection from "all already exported".
+                if not db.get_export_entries(conn):
+                    console.print("Nothing to export — the collection is empty.")
+                    raise typer.Exit(1)
+                console.print(
+                    "[yellow]Nothing new to export[/yellow] — every entry was exported already. "
+                    "Use [bold]--all[/bold] to re-export everything, or "
+                    "[bold]--set <CODE>[/bold] for one set."
+                )
+                raise typer.Exit()
+
+        written = export.write_moxfield_csv(entries, output)
+        db.mark_entries_exported(
+            conn, [e["id"] for e in entries], datetime.now(timezone.utc).isoformat()
+        )
     finally:
         conn.close()
 
-    if not entries:
-        console.print("Nothing to export — the collection is empty.")
-        raise typer.Exit(1)
-
-    written = export.write_moxfield_csv(entries, output)
+    scope = "" if all_entries or set_code is not None else "new "
     console.print(
-        f"[green]Exported[/green] [green]{written}[/green] cards to [bold]{output}[/bold]."
+        f"[green]Exported[/green] [green]{written}[/green] {scope}cards to [bold]{output}[/bold]."
     )
 
 

@@ -153,6 +153,11 @@ re-fetch fails but a stale cache exists, the stale copy is used rather than fail
 | `foil` | INTEGER | NOT NULL DEFAULT 0 |
 | `source_type` | TEXT | NOT NULL — see below |
 | `source_set_code` | TEXT | set code that generated this entry |
+| `exported_at` | TEXT | NULL until the entry is written to a Moxfield CSV (issue #76); ISO 8601 timestamp once exported |
+
+`exported_at` is **entry-level** (not set-level) so manual `add-card` singles take part
+in the incremental export uniformly alongside `full_set` entries, and a partial export
+stays consistent. It backs the delta export (see "Moxfield CSV export").
 
 **`source_type` values**
 
@@ -236,6 +241,33 @@ case-insensitive, so reordered/extra columns are tolerated; only `Edition` +
 (`source_type = manual`). Rows tagged `Full Set: <CODE>` are **skipped** (whole sets
 are added via `add`), and re-importing a printing stacks onto its existing manual
 quantity rather than duplicating it.
+
+### Incremental export (delta, issue #76)
+
+Moxfield's collection import is **additive** — re-importing a card stacks its quantity
+rather than replacing it. So `export moxfield` is a **delta by default**: it emits only
+entries with `exported_at IS NULL` and, on a successful write, stamps those rows with
+the current timestamp. Re-running after adding more sets therefore pushes just the new
+cards instead of doubling what's already in Moxfield. The delta is idempotent — a second
+export immediately after the first emits nothing.
+
+Flags (each stamps the rows it emits):
+
+- *(default)* — new entries only (`exported_at IS NULL`). If nothing is new, print
+  "nothing new to export" and exit 0 without writing; a genuinely empty collection still
+  errors ("nothing to export — the collection is empty").
+- `--all` — the whole collection, regardless of state (first import, or rebuilding a
+  wiped Moxfield library). Re-stamps every emitted row.
+- `--set <CODE>` — just that set's entries (its `full_set` rows and any `override`s),
+  regardless of state.
+
+Override suppression applies in every mode (an overridden `full_set` row is omitted in
+favour of its `override`).
+
+**Removals don't round-trip.** A CSV import can't delete or decrement, so removing a set
+in mtgsets after exporting it can't pull those cards out of Moxfield. The manual step:
+in Moxfield, filter on the `Full Set: <CODE>` tag and bulk-delete. A dedicated
+removal-sync flow is a separate follow-up.
 
 ---
 
