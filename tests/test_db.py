@@ -479,3 +479,47 @@ def test_get_export_entries_override_suppresses_full_set_row(conn) -> None:
     assert (over["quantity"], over["condition"], over["foil"]) == (3, "Played", 1)
     # neo-2 (no override) still exports as its generated full_set row.
     assert by_number[("neo", "2")]["source_type"] == "full_set"
+
+
+# -- scryfall_sets cache (issue #68) ----------------------------------------------
+
+
+def test_cached_sets_empty_by_default(conn) -> None:
+    assert db.get_cached_sets(conn) == []
+    assert db.get_sets_fetched_at(conn) is None
+
+
+def test_replace_and_get_cached_sets(conn) -> None:
+    sets = [
+        {"code": "neo", "name": "Kamigawa: Neon Dynasty", "set_type": "expansion"},
+        {"code": "mom", "name": "March of the Machine", "set_type": "expansion"},
+    ]
+    written = db.replace_cached_sets(conn, sets, "2026-06-24T00:00:00+00:00")
+    assert written == 2
+
+    cached = db.get_cached_sets(conn)
+    assert {s["code"] for s in cached} == {"neo", "mom"}
+    # Round-trips the full object, not just the code.
+    neo = next(s for s in cached if s["code"] == "neo")
+    assert neo["name"] == "Kamigawa: Neon Dynasty"
+    # All rows share the one snapshot timestamp.
+    assert db.get_sets_fetched_at(conn) == "2026-06-24T00:00:00+00:00"
+
+
+def test_replace_cached_sets_is_wholesale(conn) -> None:
+    db.replace_cached_sets(
+        conn,
+        [{"code": "neo", "name": "NEO"}, {"code": "mom", "name": "MOM"}],
+        "2026-06-01T00:00:00+00:00",
+    )
+    # A second replace clears the old snapshot entirely — no stale leftovers.
+    db.replace_cached_sets(conn, [{"code": "dft", "name": "DFT"}], "2026-06-24T00:00:00+00:00")
+    cached = db.get_cached_sets(conn)
+    assert [s["code"] for s in cached] == ["dft"]
+    assert db.get_sets_fetched_at(conn) == "2026-06-24T00:00:00+00:00"
+
+
+def test_replace_cached_sets_skips_codeless_entries(conn) -> None:
+    # A malformed set object without a code can't key a row; it's dropped, not fatal.
+    db.replace_cached_sets(conn, [{"name": "no code here"}, {"code": "neo"}], "2026-06-24T00:00:00")
+    assert [s["code"] for s in db.get_cached_sets(conn)] == ["neo"]

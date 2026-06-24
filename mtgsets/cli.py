@@ -9,7 +9,7 @@ runs end to end, but the bodies are stubs filled in by issues #2-#10.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import typer
@@ -28,6 +28,55 @@ console = Console()
 
 _TODO = "[yellow]not yet implemented[/yellow]"
 
+#: How long the locally cached Scryfall set list stays fresh before a re-fetch (#68).
+SETS_CACHE_TTL_HOURS = 24
+
+
+def _sets_cache_is_fresh(fetched_at: str | None, now: datetime, ttl_hours: int) -> bool:
+    """True if a cache stamped ``fetched_at`` is younger than ``ttl_hours``."""
+    if not fetched_at:
+        return False
+    try:
+        stamped = datetime.fromisoformat(fetched_at)
+    except ValueError:
+        return False
+    return now - stamped < timedelta(hours=ttl_hours)
+
+
+def _load_all_sets(
+    conn,
+    *,
+    force_refresh: bool = False,
+    ttl_hours: int = SETS_CACHE_TTL_HOURS,
+) -> list[dict]:
+    """Return Scryfall's full set list, served from the local cache when fresh (#68).
+
+    The list (~1000 sets, paginated) is expensive to fetch, so it's cached in the db
+    (``scryfall_sets``). A fetch happens only when the cache is empty, older than
+    ``ttl_hours``, or ``force_refresh`` is set; otherwise the cached snapshot is
+    returned with no network call, which is what lets ``search``/``stats`` run offline
+    on a warm cache. If a needed fetch fails but a (stale) cache exists, the stale copy
+    is returned rather than failing. :class:`scryfall.ScryfallError` propagates only
+    when a fetch is required and there is no cache to fall back on.
+    """
+    cached = db.get_cached_sets(conn)
+    now = datetime.now(timezone.utc)
+    if (
+        cached
+        and not force_refresh
+        and _sets_cache_is_fresh(db.get_sets_fetched_at(conn), now, ttl_hours)
+    ):
+        return cached
+    try:
+        with scryfall.ScryfallClient() as client:
+            sets = client.get_sets()
+    except scryfall.ScryfallError:
+        if cached:
+            return cached  # network down but a stale cache beats no data
+        raise
+    db.replace_cached_sets(conn, sets, now.isoformat())
+    return sets
+
 
 @app.command()
 def init(
@@ -44,14 +93,29 @@ def init(
 
 
 @app.command()
-def search(query: str = typer.Argument(..., help="Set name or code substring.")) -> None:
-    """Search Scryfall for sets by name or code."""
+def search(
+    query: str = typer.Argument(..., help="Set name or code substring."),
+    db_path: Path = typer.Option(db.DB_PATH, "--db-path", help="Database file location."),
+    refresh_sets: bool = typer.Option(
+        False,
+        "--refresh-sets",
+        help="Force a re-fetch of the Scryfall set list, ignoring the cache.",
+    ),
+) -> None:
+    """Search Scryfall for sets by name or code.
+
+    The set list is cached locally (24h TTL), so repeated searches are instant and
+    work offline once warm. Use ``--refresh-sets`` to force a re-fetch.
+    """
+    db.init_db(db_path)
+    conn = db.get_connection(db_path)
     try:
-        with scryfall.ScryfallClient() as client:
-            all_sets = client.get_sets()
+        all_sets = _load_all_sets(conn, force_refresh=refresh_sets)
     except scryfall.ScryfallError as exc:
         console.print(f"[red]Scryfall request failed:[/red] {exc}")
         raise typer.Exit(1) from exc
+    finally:
+        conn.close()
 
     matches = scryfall.match_sets(all_sets, query)
     if not matches:
@@ -925,6 +989,11 @@ def stats_command(
     progress: bool = typer.Option(
         False, "--progress", help="Show release-timeline progress (needs Scryfall)."
     ),
+    refresh_sets: bool = typer.Option(
+        False,
+        "--refresh-sets",
+        help="Force a re-fetch of the Scryfall set list, ignoring the cache.",
+    ),
     value: bool = typer.Option(
         False, "--value", help="Estimate collection value from cached Scryfall prices."
     ),
@@ -980,18 +1049,21 @@ def stats_command(
     card_entries = sum(r["entry_count"] for r in rows)
 
     # The only networked section left is the Scryfall set list (sets-owned total,
-    # --progress, --year). Value reads cached prices from the db, so no fetch here.
-    # --no-remote is authoritative: it suppresses every networked section.
+    # --progress, --year), and it's served from the local cache when fresh (#68).
+    # Value reads cached prices from the db, so no fetch here. --no-remote is
+    # authoritative: it suppresses every networked section, cache included.
     all_sets: list[dict] | None = None
     if not no_remote:
+        conn = db.get_connection(db_path)
         try:
-            with scryfall.ScryfallClient() as client:
-                all_sets = client.get_sets()
+            all_sets = _load_all_sets(conn, force_refresh=refresh_sets)
         except scryfall.ScryfallError as exc:
             console.print(
                 f"[yellow]Note:[/yellow] could not reach Scryfall ({exc}); "
                 "showing local stats only."
             )
+        finally:
+            conn.close()
 
     # Release denominator only when not explicitly skipped (and the fetch succeeded).
     release_codes = (

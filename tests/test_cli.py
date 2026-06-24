@@ -13,7 +13,7 @@ import httpx
 import pytest
 from typer.testing import CliRunner
 
-from mtgsets import scryfall
+from mtgsets import db, scryfall
 from mtgsets.cli import app
 from mtgsets.scryfall import ScryfallClient
 
@@ -597,10 +597,127 @@ def test_show_missing_db_exits_1(db_path) -> None:
 # -- search ----------------------------------------------------------------------
 
 
-def test_search_lists_matches(mock_scryfall) -> None:
-    result = runner.invoke(app, ["search", "neo"])
+def test_search_lists_matches(mock_scryfall, db_path) -> None:
+    result = runner.invoke(app, ["search", "neo", "--db-path", str(db_path)])
     assert result.exit_code == 0, result.output
     assert "NEO" in result.output
+
+
+# -- set-list cache: TTL, manual refresh, offline (issue #68) --------------------
+
+
+def counting_get_sets(monkeypatch, sets):
+    """Patch ScryfallClient.get_sets to a call-counter returning ``sets``.
+
+    Returns the mutable counter dict so a test can assert how many real fetches the
+    cache let through.
+    """
+    calls = {"n": 0}
+
+    def _get(self):
+        calls["n"] += 1
+        return sets
+
+    monkeypatch.setattr(scryfall.ScryfallClient, "get_sets", _get)
+    return calls
+
+
+def test_search_serves_second_call_from_cache(monkeypatch, db_path) -> None:
+    calls = counting_get_sets(monkeypatch, [NEO_SET, MOM_SET])
+    assert runner.invoke(app, ["search", "neo", "--db-path", str(db_path)]).exit_code == 0
+    assert calls["n"] == 1  # cold cache -> one fetch
+    # Second search within the TTL is served from the cache, no new fetch.
+    result = runner.invoke(app, ["search", "mom", "--db-path", str(db_path)])
+    assert result.exit_code == 0, result.output
+    assert "MOM" in result.output
+    assert calls["n"] == 1
+
+
+def test_search_refresh_sets_forces_fetch(monkeypatch, db_path) -> None:
+    calls = counting_get_sets(monkeypatch, [NEO_SET, MOM_SET])
+    assert runner.invoke(app, ["search", "neo", "--db-path", str(db_path)]).exit_code == 0
+    assert calls["n"] == 1
+    # --refresh-sets bypasses the fresh cache and re-fetches.
+    result = runner.invoke(app, ["search", "neo", "--refresh-sets", "--db-path", str(db_path)])
+    assert result.exit_code == 0, result.output
+    assert calls["n"] == 2
+
+
+def test_search_refetches_when_cache_stale(monkeypatch, db_path) -> None:
+    calls = counting_get_sets(monkeypatch, [NEO_SET, MOM_SET])
+    assert runner.invoke(app, ["search", "neo", "--db-path", str(db_path)]).exit_code == 0
+    assert calls["n"] == 1
+    # Age the cache past the 24h TTL by rewriting its timestamp directly.
+    conn = db.get_connection(db_path)
+    conn.execute("UPDATE scryfall_sets SET fetched_at = ?", ("2000-01-01T00:00:00+00:00",))
+    conn.commit()
+    conn.close()
+    assert runner.invoke(app, ["search", "neo", "--db-path", str(db_path)]).exit_code == 0
+    assert calls["n"] == 2  # stale -> re-fetch
+
+
+def test_search_warm_cache_works_offline(monkeypatch, db_path) -> None:
+    counting_get_sets(monkeypatch, [NEO_SET, MOM_SET])
+    assert runner.invoke(app, ["search", "neo", "--db-path", str(db_path)]).exit_code == 0
+
+    # Network now down: a fresh cache means get_sets is never called, so it still works.
+    def boom(self):
+        raise scryfall.ScryfallError("network down")
+
+    monkeypatch.setattr(scryfall.ScryfallClient, "get_sets", boom)
+    result = runner.invoke(app, ["search", "neo", "--db-path", str(db_path)])
+    assert result.exit_code == 0, result.output
+    assert "NEO" in result.output
+
+
+def test_search_stale_cache_falls_back_when_offline(monkeypatch, db_path) -> None:
+    counting_get_sets(monkeypatch, [NEO_SET, MOM_SET])
+    assert runner.invoke(app, ["search", "neo", "--db-path", str(db_path)]).exit_code == 0
+    # Age the cache, then drop the network: the stale snapshot is used, not an error.
+    conn = db.get_connection(db_path)
+    conn.execute("UPDATE scryfall_sets SET fetched_at = ?", ("2000-01-01T00:00:00+00:00",))
+    conn.commit()
+    conn.close()
+
+    def boom(self):
+        raise scryfall.ScryfallError("network down")
+
+    monkeypatch.setattr(scryfall.ScryfallClient, "get_sets", boom)
+    result = runner.invoke(app, ["search", "neo", "--db-path", str(db_path)])
+    assert result.exit_code == 0, result.output
+    assert "NEO" in result.output
+
+
+def test_search_cold_cache_offline_errors(monkeypatch, db_path) -> None:
+    # No cache and no network -> a clean failure (nothing to fall back on).
+    def boom(self):
+        raise scryfall.ScryfallError("network down")
+
+    monkeypatch.setattr(scryfall.ScryfallClient, "get_sets", boom)
+    result = runner.invoke(app, ["search", "neo", "--db-path", str(db_path)])
+    assert result.exit_code == 1
+    assert "Scryfall request failed" in result.output
+
+
+def test_stats_uses_cached_set_list(monkeypatch, db_path) -> None:
+    # stats shares the same cache: warming it via search means stats needs no fetch.
+    # Seed an owned set directly so this test drives only the set-list cache path
+    # (counting get_sets needs the real client class, which mock_scryfall would shadow).
+    db.init_db(db_path)
+    conn = db.get_connection(db_path)
+    db.insert_owned_set(
+        conn, set_code="neo", set_name="Kamigawa: Neon Dynasty", added_at="2024-01-01"
+    )
+    conn.commit()
+    conn.close()
+
+    calls = counting_get_sets(monkeypatch, [NEO_SET, MOM_SET])
+    assert runner.invoke(app, ["search", "neo", "--db-path", str(db_path)]).exit_code == 0
+    assert calls["n"] == 1
+    result = runner.invoke(app, ["stats", "--db-path", str(db_path)])
+    assert result.exit_code == 0, result.output
+    assert "1 / 2 core+expansion" in result.output
+    assert calls["n"] == 1  # served from the cache search warmed
 
 
 # -- stats -----------------------------------------------------------------------

@@ -61,6 +61,14 @@ CREATE TABLE IF NOT EXISTS collection_entries (
 -- without touching manual singles or overrides.
 CREATE INDEX IF NOT EXISTS idx_collection_entries_source
     ON collection_entries (source_type, source_set_code);
+
+-- Local cache of Scryfall's full set list (issue #68). One row per set, all sharing
+-- a single ``fetched_at`` so the cache is an atomic snapshot with one age (TTL).
+CREATE TABLE IF NOT EXISTS scryfall_sets (
+    code       TEXT PRIMARY KEY,
+    full_json  TEXT NOT NULL,
+    fetched_at TEXT NOT NULL
+);
 """
 
 
@@ -468,3 +476,43 @@ def insert_collection_entries(conn: sqlite3.Connection, rows: Iterable[tuple[Any
         rows,
     )
     return len(rows)
+
+
+# -- Scryfall set-list cache (issue #68) ------------------------------------------
+
+
+def replace_cached_sets(
+    conn: sqlite3.Connection, sets: Iterable[dict[str, Any]], fetched_at: str
+) -> int:
+    """Replace the cached Scryfall set list wholesale. Commits.
+
+    Clears ``scryfall_sets`` and re-inserts one row per set (its ``code``, the raw
+    JSON object, and a shared ``fetched_at`` timestamp), so the cache is always a
+    single atomic snapshot with one age for the TTL check. Returns the rows written.
+    """
+    rows = [
+        (s["code"], json.dumps(s, separators=(",", ":")), fetched_at) for s in sets if s.get("code")
+    ]
+    conn.execute("DELETE FROM scryfall_sets")
+    conn.executemany(
+        "INSERT OR REPLACE INTO scryfall_sets (code, full_json, fetched_at) VALUES (?, ?, ?)",
+        rows,
+    )
+    conn.commit()
+    return len(rows)
+
+
+def get_cached_sets(conn: sqlite3.Connection) -> list[dict[str, Any]]:
+    """Return the cached Scryfall set list (parsed), or ``[]`` if the cache is empty."""
+    rows = conn.execute("SELECT full_json FROM scryfall_sets").fetchall()
+    return [json.loads(row["full_json"]) for row in rows]
+
+
+def get_sets_fetched_at(conn: sqlite3.Connection) -> str | None:
+    """Return when the set-list cache was last refreshed (ISO 8601), or None if empty.
+
+    Every cached row shares the same ``fetched_at`` (see :func:`replace_cached_sets`),
+    so any row's value is the snapshot's age.
+    """
+    row = conn.execute("SELECT fetched_at FROM scryfall_sets LIMIT 1").fetchone()
+    return row["fetched_at"] if row is not None else None
