@@ -66,6 +66,11 @@ a single exception type, `ScryfallError` (carrying an optional `status_code`). T
 the **only** place that catches it: it maps the error to a friendly message and
 `raise typer.Exit(1)`, special-casing `404` ("no set found — try `mtgsets search`").
 
+Transient failures are absorbed below that boundary: `_get` retries `429` and `5xx` with
+bounded exponential backoff (honouring `Retry-After`) before giving up and raising
+`ScryfallError`. `404` and other `4xx` are non-retryable and surface immediately, so the
+CLI's `404` handling is unaffected.
+
 Pure-logic and I/O modules never print and never call `typer.Exit`. Keeping the catch at
 the CLI edge means one consistent place decides how a network failure looks to the user.
 
