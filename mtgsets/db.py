@@ -1,7 +1,7 @@
 """SQLite storage for mtgsets.
 
-The schema (owned_sets, cards, collection_entries) is specified in docs/DESIGN.md.
-This module owns schema creation and, in later issues, all DB access. Keep the DDL
+The collection and Scryfall-cache schema is specified in docs/DESIGN.md. This module
+owns schema creation, lightweight migrations, and all database access. Keep the DDL
 below in sync with the design doc.
 """
 
@@ -16,8 +16,28 @@ from typing import Any
 #: Default on-disk location of the collection database (gitignored).
 DB_PATH = Path("data") / "collection.db"
 
+#: Card-snapshot tables are also applied by :func:`_migrate` for existing databases.
+_CARD_CACHE_SCHEMA = """
+CREATE TABLE IF NOT EXISTS card_cache_sets (
+    set_code  TEXT PRIMARY KEY,
+    set_name  TEXT NOT NULL,
+    synced_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS card_cache_entries (
+    set_code    TEXT NOT NULL,
+    scryfall_id TEXT NOT NULL,
+    PRIMARY KEY (set_code, scryfall_id),
+    FOREIGN KEY (set_code) REFERENCES card_cache_sets(set_code) ON DELETE CASCADE,
+    FOREIGN KEY (scryfall_id) REFERENCES cards(scryfall_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_card_cache_entries_card
+    ON card_cache_entries (scryfall_id);
+"""
+
 #: Schema DDL — keep in sync with docs/DESIGN.md.
-SCHEMA = """
+SCHEMA = f"""
 CREATE TABLE IF NOT EXISTS owned_sets (
     set_code  TEXT PRIMARY KEY,
     set_name  TEXT NOT NULL,
@@ -43,6 +63,8 @@ CREATE TABLE IF NOT EXISTS cards (
     booster          INTEGER,
     full_json        TEXT NOT NULL
 );
+
+{_CARD_CACHE_SCHEMA}
 
 CREATE TABLE IF NOT EXISTS collection_entries (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -91,10 +113,12 @@ def _migrate(conn: sqlite3.Connection) -> None:
     """Apply lightweight, idempotent schema migrations to an existing database.
 
     New databases get everything from :data:`SCHEMA`; this only patches *older* ones.
-    Currently: add ``collection_entries.exported_at`` (issue #76) when missing. No-ops
-    once the column exists, and skips the table when it doesn't exist yet (e.g. during
-    initial creation, before ``init_db`` has run the schema).
+    Adds the card-snapshot tables from issue #87 and
+    ``collection_entries.exported_at`` (issue #76) when missing. No-ops once each
+    migration exists, and skips the column when its table doesn't exist yet (e.g.
+    during initial creation, before ``init_db`` has run the full schema).
     """
+    conn.executescript(_CARD_CACHE_SCHEMA)
     cols = {row["name"] for row in conn.execute("PRAGMA table_info(collection_entries)")}
     if cols and "exported_at" not in cols:
         conn.execute("ALTER TABLE collection_entries ADD COLUMN exported_at TEXT")
@@ -138,22 +162,118 @@ def _card_row(raw: dict[str, Any]) -> tuple[Any, ...]:
     )
 
 
+def _upsert_cards(conn: sqlite3.Connection, raw_cards: Iterable[dict[str, Any]]) -> int:
+    """Write card rows without committing; shared by cache and collection operations."""
+    rows = [_card_row(c) for c in raw_cards]
+    conn.executemany(
+        "INSERT INTO cards "
+        "(scryfall_id, name, set_code, collector_number, lang, rarity, type_line, "
+        "digital, promo, variation, booster, full_json) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+        "ON CONFLICT(scryfall_id) DO UPDATE SET "
+        "name = excluded.name, set_code = excluded.set_code, "
+        "collector_number = excluded.collector_number, lang = excluded.lang, "
+        "rarity = excluded.rarity, type_line = excluded.type_line, "
+        "digital = excluded.digital, promo = excluded.promo, "
+        "variation = excluded.variation, booster = excluded.booster, "
+        "full_json = excluded.full_json",
+        rows,
+    )
+    return len(rows)
+
+
 def upsert_cards(conn: sqlite3.Connection, raw_cards: Iterable[dict[str, Any]]) -> int:
     """Insert or replace raw Scryfall card objects into the `cards` cache.
 
     Keyed by scryfall_id, so re-fetching a set refreshes existing rows. Returns the
     number of rows written.
     """
-    rows = [_card_row(c) for c in raw_cards]
-    conn.executemany(
-        "INSERT OR REPLACE INTO cards "
-        "(scryfall_id, name, set_code, collector_number, lang, rarity, type_line, "
-        "digital, promo, variation, booster, full_json) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        rows,
-    )
+    written = _upsert_cards(conn, raw_cards)
     conn.commit()
-    return len(rows)
+    return written
+
+
+def replace_cached_set_cards(
+    conn: sqlite3.Connection,
+    *,
+    set_code: str,
+    set_name: str,
+    raw_cards: Iterable[dict[str, Any]],
+    synced_at: str,
+) -> tuple[int, int, int]:
+    """Replace one set's complete filtered card snapshot. Does not commit.
+
+    Card objects are upserted so stale fields refresh, then snapshot memberships are
+    reconciled. Card rows removed from the snapshot are pruned only when no collection
+    entry or other snapshot still references them. Returns
+    ``(card_count, added_count, removed_count)``.
+    """
+    code = set_code.lower()
+    cards_by_id = {card["id"]: card for card in raw_cards}
+    old_ids = {
+        row["scryfall_id"]
+        for row in conn.execute(
+            "SELECT scryfall_id FROM card_cache_entries WHERE set_code = ?", (code,)
+        )
+    }
+    new_ids = set(cards_by_id)
+
+    _upsert_cards(conn, cards_by_id.values())
+    conn.execute(
+        "INSERT INTO card_cache_sets (set_code, set_name, synced_at) VALUES (?, ?, ?) "
+        "ON CONFLICT(set_code) DO UPDATE SET "
+        "set_name = excluded.set_name, synced_at = excluded.synced_at",
+        (code, set_name, synced_at),
+    )
+    conn.execute("DELETE FROM card_cache_entries WHERE set_code = ?", (code,))
+    conn.executemany(
+        "INSERT INTO card_cache_entries (set_code, scryfall_id) VALUES (?, ?)",
+        ((code, card_id) for card_id in cards_by_id),
+    )
+
+    # A historical printing may still back a manual/full-set/override entry, in which
+    # case it must outlive the current reference snapshot for FK and export integrity.
+    conn.execute(
+        "DELETE FROM cards WHERE set_code = ? "
+        "AND NOT EXISTS ("
+        "  SELECT 1 FROM card_cache_entries cc "
+        "  WHERE cc.scryfall_id = cards.scryfall_id) "
+        "AND NOT EXISTS ("
+        "  SELECT 1 FROM collection_entries ce "
+        "  WHERE ce.scryfall_id = cards.scryfall_id)",
+        (code,),
+    )
+    return len(new_ids), len(new_ids - old_ids), len(old_ids - new_ids)
+
+
+def count_cached_set_cards(conn: sqlite3.Connection, set_code: str) -> int:
+    """Return the number of printings in a set's current reference snapshot."""
+    return conn.execute(
+        "SELECT COUNT(*) FROM card_cache_entries WHERE set_code = ?", (set_code.lower(),)
+    ).fetchone()[0]
+
+
+def get_cached_set_cards(conn: sqlite3.Connection, set_code: str) -> list[dict[str, Any]]:
+    """Return parsed Scryfall objects in a set's current reference snapshot."""
+    rows = conn.execute(
+        "SELECT c.full_json FROM card_cache_entries cc "
+        "JOIN cards c ON c.scryfall_id = cc.scryfall_id "
+        "WHERE cc.set_code = ? "
+        "ORDER BY CAST(c.collector_number AS INTEGER), c.collector_number",
+        (set_code.lower(),),
+    ).fetchall()
+    return [json.loads(row["full_json"]) for row in rows]
+
+
+def list_cached_card_sets(conn: sqlite3.Connection) -> list[sqlite3.Row]:
+    """Return cached-set metadata and snapshot counts, newest sync first."""
+    return conn.execute(
+        "SELECT s.set_code, s.set_name, s.synced_at, COUNT(e.scryfall_id) AS card_count "
+        "FROM card_cache_sets s "
+        "LEFT JOIN card_cache_entries e ON e.set_code = s.set_code "
+        "GROUP BY s.set_code "
+        "ORDER BY s.synced_at DESC, s.set_code"
+    ).fetchall()
 
 
 def is_set_owned(conn: sqlite3.Connection, set_code: str) -> bool:

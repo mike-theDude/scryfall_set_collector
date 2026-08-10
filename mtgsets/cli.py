@@ -243,7 +243,13 @@ def _add_one_set(conn, set_code: str) -> str:
     entries = collection.generate_full_set_entries(code, breakdown.included)
     added_at = datetime.now(timezone.utc).isoformat()
     try:
-        db.upsert_cards(conn, breakdown.included)
+        db.replace_cached_set_cards(
+            conn,
+            set_code=code,
+            set_name=set_name,
+            raw_cards=breakdown.included,
+            synced_at=added_at,
+        )
         db.insert_owned_set(conn, set_code=code, set_name=set_name, added_at=added_at)
         written = db.insert_collection_entries(conn, (e.as_row() for e in entries))
         conn.commit()
@@ -291,7 +297,13 @@ def add(
         entries = collection.generate_full_set_entries(code, breakdown.included)
         added_at = datetime.now(timezone.utc).isoformat()
         try:
-            db.upsert_cards(conn, breakdown.included)
+            db.replace_cached_set_cards(
+                conn,
+                set_code=code,
+                set_name=set_obj.get("name", display_code),
+                raw_cards=breakdown.included,
+                synced_at=added_at,
+            )
             db.insert_owned_set(
                 conn,
                 set_code=code,
@@ -345,6 +357,93 @@ def add_multi(
     summary = ", ".join(f"{counts[k]} {k}" for k in ("added", "skipped", "failed") if counts[k])
     console.print(f"\n{summary}.")
 
+    if counts["skipped"] or counts["failed"]:
+        raise typer.Exit(1)
+
+
+def _sync_one_set(conn, set_code: str) -> str:
+    """Fetch and replace one filtered card snapshot without changing ownership."""
+    code = set_code.strip().lower()
+    display_code = code.upper()
+    try:
+        with scryfall.ScryfallClient() as client:
+            set_obj = client.get_set(code)
+            cards = client.get_set_cards(code)
+    except scryfall.ScryfallError as exc:
+        if exc.status_code == 404:
+            console.print(
+                f"[red]Failed {display_code}:[/red] No set found (try [bold]mtgsets search[/bold])."
+            )
+        else:
+            console.print(f"[red]Failed {display_code}:[/red] Scryfall request failed: {exc}")
+        return "failed"
+
+    code = (set_obj.get("code") or code).lower()
+    display_code = code.upper()
+    set_name = set_obj.get("name", display_code)
+    breakdown = collection.build_breakdown(cards)
+    if not breakdown.included_count:
+        console.print(
+            f"[yellow]Skipped {display_code}:[/yellow] no cards qualify for the card cache "
+            "(unreleased, or printings don't match the full-set rules?)."
+        )
+        return "skipped"
+
+    try:
+        card_count, added, removed = db.replace_cached_set_cards(
+            conn,
+            set_code=code,
+            set_name=set_name,
+            raw_cards=breakdown.included,
+            synced_at=datetime.now(timezone.utc).isoformat(),
+        )
+        conn.commit()
+    except Exception as exc:
+        conn.rollback()
+        console.print(f"[red]Failed {display_code}:[/red] {exc}")
+        return "failed"
+
+    if added or removed:
+        change = f"[dim]({added} added, {removed} removed)[/dim]"
+    else:
+        change = "[dim](composition unchanged)[/dim]"
+    console.print(
+        f"[green]Synced[/green] {set_name} ([cyan]{display_code}[/cyan]): "
+        f"[green]{card_count}[/green] cards cached {change}."
+    )
+    return "synced"
+
+
+@app.command(name="sync-cards")
+def sync_cards(
+    set_codes: list[str] = typer.Argument(..., help="One or more set codes, e.g. MSH HOB."),
+    db_path: Path = typer.Option(db.DB_PATH, "--db-path", help="Database file location."),
+) -> None:
+    """Persist current filtered card data without marking any set as owned.
+
+    Each code is fetched and reconciled independently, so one failed set does not
+    prevent later sets from syncing. Repeated codes are de-duplicated, existing card
+    fields are refreshed, and added or removed printings are reflected in the cache.
+    """
+    seen: set[str] = set()
+    codes: list[str] = []
+    for raw in set_codes:
+        code = raw.strip().lower()
+        if code and code not in seen:
+            seen.add(code)
+            codes.append(raw)
+
+    db.init_db(db_path)
+    conn = db.get_connection(db_path)
+    counts = {"synced": 0, "skipped": 0, "failed": 0}
+    try:
+        for raw in codes:
+            counts[_sync_one_set(conn, raw)] += 1
+    finally:
+        conn.close()
+
+    summary = ", ".join(f"{counts[k]} {k}" for k in ("synced", "skipped", "failed") if counts[k])
+    console.print(f"\n{summary}.")
     if counts["skipped"] or counts["failed"]:
         raise typer.Exit(1)
 
@@ -702,8 +801,14 @@ def _refresh_one_set(conn, code: str) -> str:
     # -- write (own transaction) --------------------------------------------
     entries = collection.generate_full_set_entries(code, breakdown.included)
     try:
-        cards_written = db.upsert_cards(conn, breakdown.included)
         db.delete_full_set_entries(conn, code)
+        cards_written, _, _ = db.replace_cached_set_cards(
+            conn,
+            set_code=code,
+            set_name=set_name,
+            raw_cards=breakdown.included,
+            synced_at=datetime.now(timezone.utc).isoformat(),
+        )
         after = db.insert_collection_entries(conn, (e.as_row() for e in entries))
         db.update_owned_set_name(conn, code, set_name)
         conn.commit()

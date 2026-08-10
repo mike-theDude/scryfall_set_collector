@@ -511,9 +511,14 @@ def test_migrate_adds_exported_at_to_older_db(tmp_path) -> None:
     conn = db.get_connection(path)  # opening migrates it
     try:
         cols = {r["name"] for r in conn.execute("PRAGMA table_info(collection_entries)")}
+        tables = {
+            r["name"]
+            for r in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'").fetchall()
+        }
     finally:
         conn.close()
     assert "exported_at" in cols
+    assert {"card_cache_sets", "card_cache_entries"} <= tables
 
 
 def test_get_export_entries_unexported_only_and_marking(conn) -> None:
@@ -544,6 +549,82 @@ def test_get_export_entries_by_set_scopes_to_one_set(conn) -> None:
     assert ("override", "neo") in sigs
     assert all(r["source_set_code"] == "neo" for r in neo)
     assert all("mom" != r["source_set_code"] for r in neo)
+
+
+# -- per-set card-data cache (issue #87) -----------------------------------------
+
+
+def test_replace_cached_set_cards_refreshes_and_reconciles(conn) -> None:
+    first = [
+        make_card("neo-1", name="Old Name", collector_number="1"),
+        make_card("neo-2", name="Removed", collector_number="2"),
+    ]
+    result = db.replace_cached_set_cards(
+        conn,
+        set_code="NEO",
+        set_name="Kamigawa: Neon Dynasty",
+        raw_cards=first,
+        synced_at="2026-08-01T00:00:00+00:00",
+    )
+    conn.commit()
+    assert result == (2, 2, 0)
+    assert db.count_cached_set_cards(conn, "neo") == 2
+
+    changed = make_card("neo-1", name="Updated Name", collector_number="1")
+    changed["rarity"] = "rare"
+    second = [changed, make_card("neo-3", name="Added", collector_number="3")]
+    result = db.replace_cached_set_cards(
+        conn,
+        set_code="neo",
+        set_name="Renamed Set",
+        raw_cards=second,
+        synced_at="2026-08-10T00:00:00+00:00",
+    )
+    conn.commit()
+
+    assert result == (2, 1, 1)
+    cached = db.get_cached_set_cards(conn, "NEO")
+    assert [(card["id"], card["name"]) for card in cached] == [
+        ("neo-1", "Updated Name"),
+        ("neo-3", "Added"),
+    ]
+    assert cached[0]["rarity"] == "rare"  # existing fields were refreshed
+    assert conn.execute("SELECT 1 FROM cards WHERE scryfall_id = 'neo-2'").fetchone() is None
+    cache_set = db.list_cached_card_sets(conn)[0]
+    assert tuple(cache_set) == (
+        "neo",
+        "Renamed Set",
+        "2026-08-10T00:00:00+00:00",
+        2,
+    )
+
+
+def test_replace_cached_set_cards_retains_removed_owned_printing(conn) -> None:
+    kept = make_card("neo-1", name="Still Current", collector_number="1")
+    removed = make_card("neo-2", name="Historical Owned Card", collector_number="2")
+    db.replace_cached_set_cards(
+        conn,
+        set_code="neo",
+        set_name="NEO",
+        raw_cards=[kept, removed],
+        synced_at="2026-08-01T00:00:00+00:00",
+    )
+    db.add_manual_entry(conn, scryfall_id="neo-2", set_code="neo")
+    conn.commit()
+
+    db.replace_cached_set_cards(
+        conn,
+        set_code="neo",
+        set_name="NEO",
+        raw_cards=[kept],
+        synced_at="2026-08-10T00:00:00+00:00",
+    )
+    conn.commit()
+
+    assert [card["id"] for card in db.get_cached_set_cards(conn, "neo")] == ["neo-1"]
+    # It left the current snapshot, but the manual ownership row still needs the card.
+    assert conn.execute("SELECT 1 FROM cards WHERE scryfall_id = 'neo-2'").fetchone() is not None
+    assert len(db.get_export_entries(conn)) == 1
 
 
 # -- scryfall_sets cache (issue #68) ----------------------------------------------

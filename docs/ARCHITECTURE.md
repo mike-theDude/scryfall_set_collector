@@ -92,6 +92,12 @@ Two invariants drive the architecture and must be preserved by any code touching
 - **All include/exclude logic lives in `filters.py`** — the single source of truth, tuned
   against real Scryfall data. Do not scatter filter conditions elsewhere.
 
+Reference card snapshots are a separate concern from ownership. `card_cache_sets` and
+`card_cache_entries` describe the current filtered contents known for a set, while the
+shared `cards` rows hold each raw Scryfall printing. Only `owned_sets` and
+`collection_entries` claim ownership. This lets `sync-cards` replace an unowned set's
+reference snapshot without changing anything consumed by list, stats, or exports.
+
 ## Command flow (example: `add`)
 
 ```
@@ -106,3 +112,8 @@ cli.add
 
 `preview` runs the same fetch + `build_breakdown` and stops before any write — which is
 why `preview`-before-`add` is cheap and consistent: they share the pure core.
+
+`sync-cards` shares the fetch and filter stages, then stops at
+`db.replace_cached_set_cards`: it updates snapshot membership and card fields but never
+calls an ownership or collection-entry write. Each requested set has its own transaction
+so a failed batch item cannot roll back a successful one.
