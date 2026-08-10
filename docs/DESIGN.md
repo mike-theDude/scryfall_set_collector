@@ -124,6 +124,37 @@ storage/display and the full JSON object).
 | `booster` | INTEGER | |
 | `full_json` | TEXT | NOT NULL (raw Scryfall object) |
 
+`cards` holds the shared printing records used by both reference snapshots and owned
+collection entries. A row in this table does **not** imply ownership. Likewise, a card
+may remain here after it leaves a current reference snapshot when a manual, full-set, or
+override entry still references that printing.
+
+### `card_cache_sets` (per-set card snapshot metadata)
+
+One row records that the app has a complete, filtered reference snapshot for a set.
+This is independent of `owned_sets`: syncing an unowned set creates this row without
+claiming that the user owns it.
+
+| Column | Type | Notes |
+|---|---|---|
+| `set_code` | TEXT | PRIMARY KEY |
+| `set_name` | TEXT | NOT NULL |
+| `synced_at` | TEXT | NOT NULL (ISO 8601; when this set's cards were fetched) |
+
+### `card_cache_entries` (membership in a card snapshot)
+
+| Column | Type | Notes |
+|---|---|---|
+| `set_code` | TEXT | NOT NULL, FK -> `card_cache_sets(set_code)` ON DELETE CASCADE |
+| `scryfall_id` | TEXT | NOT NULL, FK -> `cards(scryfall_id)` |
+
+The primary key is `(set_code, scryfall_id)`. Re-syncing a set replaces these
+memberships with the printings that currently pass the normal full-set filter. Added
+printings are inserted, removed printings leave the snapshot, and existing `cards`
+rows are updated from the latest Scryfall objects. A removed printing is deleted from
+`cards` only when neither a cache snapshot nor a `collection_entries` row still
+references it.
+
 ### `scryfall_sets` (cached Scryfall set list)
 
 A local cache of Scryfall's full set list, so `search` and `stats` don't paginate
@@ -341,6 +372,14 @@ Use the [Scryfall API](https://scryfall.com/docs/api). Initially the app can mak
 search/API calls by set code. Later it can switch to Scryfall **bulk data** with
 local caching if needed.
 
-The **set list** is already cached locally (`scryfall_sets`, 24h TTL) so `search` and
-`stats` don't re-paginate every set on each run and work offline once warm — see the
-schema above. Per-set card data is still fetched on demand (cached in `cards`).
+There are three deliberately separate kinds of local state:
+
+- The **set-list cache** (`scryfall_sets`, 24h TTL) is Scryfall catalog metadata used by
+  `search` and `stats`; it contains no card contents and says nothing about ownership.
+- The **card-data cache** (`card_cache_sets`, `card_cache_entries`, and the shared
+  `cards` rows) stores the latest filtered contents of individually fetched sets.
+  `mtgsets sync-cards <SET>...`, `add`, and `refresh` replace these per-set snapshots.
+- **Owned collection data** (`owned_sets` and `collection_entries`) is changed only by
+  explicit collection commands such as `add`, `add-card`, `override-card`, and
+  `remove`. Merely syncing card data never creates, removes, or regenerates ownership
+  rows and therefore never affects collection stats or exports.

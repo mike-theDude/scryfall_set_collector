@@ -241,6 +241,119 @@ def test_add_multi_deduplicates_repeated_codes(mock_scryfall, db_path) -> None:
     assert "1 added." in result.output
 
 
+# -- sync-cards: reference data without ownership (issue #87) --------------------
+
+
+def test_sync_cards_caches_unowned_set_without_affecting_collection(
+    mock_scryfall, db_path, tmp_path
+) -> None:
+    result = runner.invoke(app, ["sync-cards", "NEO", "--db-path", str(db_path)])
+    assert result.exit_code == 0, result.output
+    assert "Synced Kamigawa: Neon Dynasty" in result.output
+    assert "4 cards cached" in result.output
+    assert "1 synced." in result.output
+
+    conn = db.get_connection(db_path)
+    try:
+        assert db.is_set_owned(conn, "neo") is False
+        assert db.count_cached_set_cards(conn, "neo") == 4
+        assert len(db.get_cached_set_cards(conn, "NEO")) == 4
+        assert conn.execute("SELECT COUNT(*) FROM collection_entries").fetchone()[0] == 0
+        assert db.get_export_entries(conn) == []
+    finally:
+        conn.close()
+
+    listing = runner.invoke(app, ["list", "--db-path", str(db_path)])
+    assert listing.exit_code == 0
+    assert "No owned sets" in listing.output
+    stats_result = runner.invoke(app, ["stats", "--no-remote", "--db-path", str(db_path)])
+    assert stats_result.exit_code == 0
+    assert "Sets owned" in stats_result.output and "0" in stats_result.output
+    assert "Card entries" in stats_result.output and "0" in stats_result.output
+    export_result = runner.invoke(
+        app,
+        [
+            "export",
+            "moxfield",
+            "--db-path",
+            str(db_path),
+            "-o",
+            str(tmp_path / "cached-only.csv"),
+        ],
+    )
+    assert export_result.exit_code == 1
+    assert "empty" in export_result.output.lower()
+
+
+def test_sync_cards_partial_batch_failure_continues(mock_scryfall, db_path) -> None:
+    result = runner.invoke(app, ["sync-cards", "ZZZ", "NEO", "--db-path", str(db_path)])
+    assert result.exit_code == 1
+    assert "Failed ZZZ" in result.output
+    assert "Synced Kamigawa: Neon Dynasty" in result.output
+    assert "1 synced, 1 failed." in result.output
+
+    conn = db.get_connection(db_path)
+    try:
+        assert db.count_cached_set_cards(conn, "neo") == 4
+        assert db.is_set_owned(conn, "neo") is False
+    finally:
+        conn.close()
+
+
+def test_sync_cards_resync_refreshes_fields_and_membership(monkeypatch, neo_cards, db_path) -> None:
+    current_cards = list(neo_cards)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/sets/neo":
+            return httpx.Response(200, json=NEO_SET)
+        if request.url.path == "/cards/search" and request.url.params.get("q") == "set:neo":
+            return httpx.Response(200, json={"data": current_cards, "has_more": False})
+        return httpx.Response(404, json={"details": "not found"})
+
+    monkeypatch.setattr(scryfall, "_REQUEST_DELAY", 0.0)
+    monkeypatch.setattr(
+        scryfall,
+        "ScryfallClient",
+        lambda *a, **k: ScryfallClient(transport=httpx.MockTransport(handler)),
+    )
+
+    first = runner.invoke(app, ["sync-cards", "NEO", "--db-path", str(db_path)])
+    assert first.exit_code == 0, first.output
+
+    updated = dict(neo_cards[1])
+    updated["name"] = "Ancestral Katana (updated)"
+    added = dict(neo_cards[1])
+    added.update(id="new-printing", name="New Main-Set Card", collector_number="5")
+    removed_id = neo_cards[2]["id"]
+    current_cards = [
+        updated if card["id"] == updated["id"] else card
+        for card in neo_cards
+        if card["id"] != removed_id
+    ]
+    current_cards.append(added)
+
+    second = runner.invoke(app, ["sync-cards", "neo", "--db-path", str(db_path)])
+    assert second.exit_code == 0, second.output
+    assert "1 added, 1 removed" in second.output
+
+    conn = db.get_connection(db_path)
+    try:
+        cached = db.get_cached_set_cards(conn, "neo")
+        by_id = {card["id"]: card for card in cached}
+        assert len(cached) == 4
+        assert by_id[updated["id"]]["name"] == "Ancestral Katana (updated)"
+        assert "new-printing" in by_id
+        assert removed_id not in by_id
+        assert (
+            conn.execute("SELECT 1 FROM cards WHERE scryfall_id = ?", (removed_id,)).fetchone()
+            is None
+        )
+        assert db.is_set_owned(conn, "neo") is False
+        assert db.get_export_entries(conn) == []
+    finally:
+        conn.close()
+
+
 # -- refresh ---------------------------------------------------------------------
 
 

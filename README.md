@@ -22,16 +22,17 @@ The guiding principle is: **store ownership at the set level, but generate, expo
 and check ownership at the card level.** Owning is recorded as "I have all of NEO";
 everything downstream operates on individual cards.
 
-1. **Fetch** — `add`/`preview` pull every printing in a set from Scryfall
+1. **Fetch** — `add`/`preview`/`sync-cards` pull every printing in a set from Scryfall
    (`/cards/search?unique=prints`), variants included.
 2. **Filter** — `mtgsets/filters.py` keeps only the regular main set: one paper,
    English, nonfoil copy of each card, basic lands included. It excludes borderless /
    showcase / extended-art variants, promos, serialized cards, tokens, art cards,
    oversized and digital-only cards, and deck-exclusive extras. The rules are tuned
    against real Scryfall data and live in **one place** so they can be adjusted.
-3. **Store** — owned sets go in an `owned_sets` row; the filtered cards are cached in
-   `cards` and expanded into card-level `collection_entries` (tagged
-   `source_type=full_set`). SQLite, stored at `data/collection.db`.
+3. **Store** — filtered card snapshots are cached independently of ownership. An
+   explicit `add` also creates an `owned_sets` row and expands the snapshot into
+   card-level `collection_entries` (tagged `source_type=full_set`). SQLite, stored at
+   `data/collection.db`.
 4. **Export** — `collection_entries` are written to a Moxfield-importable CSV.
 
 Generated entries are tagged with their source set, so `remove` deletes **only** the
@@ -107,6 +108,7 @@ Create the local database once, then add the sets you own and export:
 mtgsets init                 # create data/collection.db
 mtgsets search neo           # find a set's code
 mtgsets preview NEO          # check what will be included/excluded
+mtgsets sync-cards MSH HOB   # cache current card data without claiming ownership
 mtgsets add NEO              # mark owned + generate card entries
 mtgsets add-multi NEO DFT MOM  # add several owned sets in one run
 mtgsets list                 # review what you own
@@ -165,6 +167,7 @@ run.
 | `mtgsets init` | Create the local SQLite database and schema. |
 | `mtgsets search <query>` | Search Scryfall sets by name or code substring. |
 | `mtgsets preview <set_code>` | Show the included/excluded breakdown before adding. |
+| `mtgsets sync-cards <set_code>...` | Cache current filtered card data for one or more sets without marking them owned. |
 | `mtgsets add <set_code>` | Mark a set fully owned and generate its card entries. |
 | `mtgsets add-multi <set_code>...` | Add several sets in one run, best-effort per set. |
 | `mtgsets add-card <set_code> <number>` | Add a single card manually (coexists with full sets). |
@@ -201,6 +204,20 @@ Useful options:
 - `mtgsets search` and `mtgsets stats` cache Scryfall's full set list locally (24h
   TTL), so repeated runs are instant and work offline once the cache is warm. Pass
   `--refresh-sets` to force a re-fetch and refresh the cache.
+
+### Set-list cache, card-data cache, and ownership
+
+These are intentionally separate:
+
+- The **set-list cache** is lightweight Scryfall catalog metadata used by `search` and
+  `stats`. It knows names, codes, release dates, and set types, but not set contents.
+- The **card-data cache** stores the latest filtered printings for sets fetched by
+  `sync-cards`, `add`, or `refresh`. Re-running `sync-cards` refreshes changed fields
+  and reconciles added/removed printings. A best-effort batch reports each set and a
+  summary; any failed code does not prevent the others from syncing.
+- **Owned collection data** is created only by explicit collection commands. In
+  particular, `mtgsets sync-cards MSH HOB` creates no owned-set or collection-entry
+  rows, so `list`, collection stats, and exports remain unchanged.
 
 #### `mtgsets stats`
 
@@ -346,9 +363,9 @@ test suite makes no network calls — the Scryfall API is mocked.
 ## Roadmap
 
 The initial CLI is complete: `init`, `search`, `preview`, `add`, `add-card`,
-`override-card`, `refresh`, `list`, `show`, `stats`, `remove`, `remove-card`,
-`import-csv`, and `export moxfield` / `export json`. Feature work is tracked as GitHub
-issues.
+`override-card`, `refresh`, `sync-cards`, `list`, `show`, `stats`, `remove`,
+`remove-card`, `import-csv`, and `export moxfield` / `export json`. Feature work is
+tracked as GitHub issues.
 
 ## License
 
