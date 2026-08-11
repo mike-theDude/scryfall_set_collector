@@ -108,9 +108,17 @@ def item_from_card(
     )
 
 
+def _front_face_name(name: str) -> str:
+    """Return the front-face portion of Scryfall's combined double-faced name."""
+    return name.partition(" // ")[0]
+
+
 def render_plain(items: Iterable[WantListItem]) -> str:
     """Render line-oriented, copy-safe text with no terminal markup."""
-    lines = [f"{item.name} {item.set_code.upper()} {item.collector_number}" for item in items]
+    lines = [
+        f"{_front_face_name(item.name)} {item.set_code.upper()} {item.collector_number}"
+        for item in items
+    ]
     return "\n".join(lines) + ("\n" if lines else "")
 
 
