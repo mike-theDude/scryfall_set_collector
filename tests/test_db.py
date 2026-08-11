@@ -627,6 +627,27 @@ def test_replace_cached_set_cards_retains_removed_owned_printing(conn) -> None:
     assert len(db.get_export_entries(conn)) == 1
 
 
+def test_get_cached_set_card_resolves_exact_opaque_number(conn) -> None:
+    card = make_card("neo-a-1", name="Lettered Printing", collector_number="A-1")
+    db.replace_cached_set_cards(
+        conn,
+        set_code="NEO",
+        set_name="Kamigawa: Neon Dynasty",
+        raw_cards=[card],
+        synced_at="2026-08-10T00:00:00+00:00",
+    )
+    conn.commit()
+
+    metadata = db.get_cached_card_set(conn, "neo")
+    assert (metadata["set_name"], metadata["synced_at"]) == (
+        "Kamigawa: Neon Dynasty",
+        "2026-08-10T00:00:00+00:00",
+    )
+    assert db.get_cached_set_card(conn, "NEO", "a-1")["id"] == "neo-a-1"
+    assert db.get_cached_set_card(conn, "neo", "missing") is None
+    assert db.get_cached_card_set(conn, "missing") is None
+
+
 # -- scryfall_sets cache (issue #68) ----------------------------------------------
 
 

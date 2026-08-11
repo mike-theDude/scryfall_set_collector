@@ -62,6 +62,7 @@ mtgsets/
   collection.py   # set -> card-level entry generation
   stats.py        # collection statistics (sets owned vs. total)
   export.py       # Moxfield CSV export + import
+  wantlist.py     # plain-text / CSV card-store want lists
 data/collection.db  # local db (gitignored)
 exports/            # generated CSVs (gitignored)
 ```

@@ -16,7 +16,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from . import collection, db, export, scryfall, stats
+from . import collection, db, export, scryfall, stats, wantlist
 
 app = typer.Typer(
     name="mtgsets",
@@ -445,6 +445,123 @@ def sync_cards(
     summary = ", ".join(f"{counts[k]} {k}" for k in ("synced", "skipped", "failed") if counts[k])
     console.print(f"\n{summary}.")
     if counts["skipped"] or counts["failed"]:
+        raise typer.Exit(1)
+
+
+@app.command(name="want-list")
+def want_list_command(
+    set_code: str = typer.Argument(..., help="Set code, e.g. HOB."),
+    collector_numbers: list[str] = typer.Argument(
+        ..., help="One or more exact collector numbers, e.g. 94 91 A-1."
+    ),
+    db_path: Path = typer.Option(
+        db.DB_PATH, "--db-path", help="Database used only for cached card lookups."
+    ),
+    output: Path | None = typer.Option(
+        None, "--output", "-o", help="Write UTF-8 CSV instead of plain text."
+    ),
+    quantity: int = typer.Option(1, "--quantity", "-q", min=1, help="Wanted copies per card."),
+    language: str = typer.Option("English", "--language", help="Preferred language."),
+    finish: wantlist.Finish = typer.Option(
+        wantlist.Finish.NONFOIL, "--finish", case_sensitive=False, help="Preferred finish."
+    ),
+    condition: str = typer.Option(
+        "", "--condition", help="Preferred condition; omitted when blank."
+    ),
+) -> None:
+    """Resolve exact printings into a plain-text or CSV card-store want list.
+
+    Cached set data is used first; misses fall back to Scryfall. This command never
+    changes ownership or collection entries. Resolution is best-effort, so valid
+    cards are still emitted when another collector number fails.
+    """
+    code = set_code.strip().lower()
+    display_code = code.upper()
+    numbers = [number.strip() for number in collector_numbers]
+    cards: list[dict | None] = [None] * len(numbers)
+    set_name = ""
+    cache_known = False
+
+    if Path(db_path).exists():
+        conn = db.get_connection(db_path)
+        try:
+            cached_set = db.get_cached_card_set(conn, code)
+            if cached_set is not None:
+                cache_known = True
+                set_name = cached_set["set_name"]
+                cards = [db.get_cached_set_card(conn, code, number) for number in numbers]
+        finally:
+            conn.close()
+
+    missing = [index for index, card in enumerate(cards) if card is None]
+    failures: list[str] = []
+    if missing:
+        try:
+            with scryfall.ScryfallClient() as client:
+                if not cache_known:
+                    try:
+                        set_obj = client.get_set(code)
+                    except scryfall.ScryfallError as exc:
+                        if exc.status_code == 404:
+                            failures.append(
+                                f"No set found with code {display_code}. Check the code or run "
+                                f"mtgsets search {display_code}."
+                            )
+                        else:
+                            failures.append(f"Scryfall request failed for {display_code}: {exc}")
+                        missing = []
+                    else:
+                        code = (set_obj.get("code") or code).lower()
+                        display_code = code.upper()
+                        set_name = set_obj.get("name") or display_code
+
+                for index in missing:
+                    number = numbers[index]
+                    if not number:
+                        failures.append(
+                            f"Unresolved {display_code}: collector number cannot be blank."
+                        )
+                        continue
+                    try:
+                        cards[index] = client.get_card(code, number)
+                    except scryfall.ScryfallError as exc:
+                        if exc.status_code == 404:
+                            failures.append(
+                                f"Unresolved {display_code} {number}: no card found; "
+                                "check the collector number."
+                            )
+                        else:
+                            failures.append(
+                                f"Failed {display_code} {number}: Scryfall request failed: {exc}"
+                            )
+        except scryfall.ScryfallError as exc:
+            # All normal client errors are handled around their individual calls. This
+            # protects the batch if a future client setup/teardown path raises one.
+            failures.append(f"Scryfall request failed for {display_code}: {exc}")
+
+    items = [
+        wantlist.item_from_card(
+            card,
+            quantity=quantity,
+            language=language.strip() or "English",
+            finish=finish,
+            condition=condition.strip(),
+            set_name=set_name,
+        )
+        for card in cards
+        if card is not None
+    ]
+
+    if output is None:
+        typer.echo(wantlist.render_plain(items), nl=False)
+    elif items:
+        written = wantlist.write_csv(items, output)
+        typer.echo(f"Wrote {written} card(s) to {output}.")
+
+    if failures:
+        for failure in failures:
+            typer.echo(failure, err=True)
+        typer.echo(f"{len(items)} resolved, {len(cards) - len(items)} unresolved.", err=True)
         raise typer.Exit(1)
 
 
