@@ -114,9 +114,9 @@ def _front_face_name(name: str) -> str:
 
 
 def render_plain(items: Iterable[WantListItem]) -> str:
-    """Render line-oriented, copy-safe text with no terminal markup."""
+    """Render line-oriented, TCGplayer-compatible text with no terminal markup."""
     lines = [
-        f"{_front_face_name(item.name)} {item.set_code.upper()} {item.collector_number}"
+        f"1 {_front_face_name(item.name)} [{item.set_code.upper()}] {item.collector_number}"
         for item in items
     ]
     return "\n".join(lines) + ("\n" if lines else "")
