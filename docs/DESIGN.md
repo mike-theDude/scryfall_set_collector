@@ -370,6 +370,10 @@ Dori, Bearer of Friends HOB 94
 Dáin Ironfoot HOB 91
 ```
 
+For double-faced cards, the card name is the front-face portion before Scryfall's
+` // ` separator. For example, `Tony Stark // The Invincible Iron Man` is emitted as
+`Tony Stark MSH 80`. The stored Scryfall name and CSV `Card Name` remain unchanged.
+
 Quantity and purchasing preferences are intentionally omitted from plain text, along
 with the full set name, rarity, and lookup URLs. They remain available in CSV output.
 Plain text is written directly to stdout rather than through Rich so copying or

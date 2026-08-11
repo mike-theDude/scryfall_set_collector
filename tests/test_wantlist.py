@@ -84,6 +84,19 @@ def test_render_plain_is_copy_safe_and_preserves_order() -> None:
     assert "\x1b" not in text
 
 
+def test_render_plain_uses_front_face_name_without_changing_canonical_name() -> None:
+    combined_name = "Tony Stark // The Invincible Iron Man"
+    item = wantlist.item_from_card(
+        sample_card(
+            name=combined_name, set="msh", set_name="Marvel Super Heroes", collector_number="80"
+        )
+    )
+
+    assert wantlist.render_plain([item]) == "Tony Stark MSH 80\n"
+    assert item.name == combined_name
+    assert wantlist.item_to_row(item)[1] == combined_name
+
+
 def test_item_to_row_matches_fixed_csv_column_order() -> None:
     item = wantlist.item_from_card(sample_card(), condition="Near Mint")
     assert wantlist.item_to_row(item) == [

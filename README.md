@@ -137,7 +137,9 @@ Dáin Ironfoot HOB 91
 
 Each resolved card is exactly one line: card name, uppercase set code, then collector
 number. Quantity, preferences, rarity, and lookup URLs are omitted so the list shares
-only the card identity.
+only the card identity. Double-faced cards use only the front-face name in plain text,
+so `Tony Stark // The Invincible Iron Man` is emitted as `Tony Stark MSH 80`. CSV keeps
+the full Scryfall card name.
 
 Give an output path for a UTF-8 spreadsheet-ready CSV:
 
