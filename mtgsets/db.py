@@ -253,6 +253,28 @@ def count_cached_set_cards(conn: sqlite3.Connection, set_code: str) -> int:
     ).fetchone()[0]
 
 
+def get_cached_card_set(conn: sqlite3.Connection, set_code: str) -> sqlite3.Row | None:
+    """Return one card-snapshot's metadata, or None when that set is not cached."""
+    return conn.execute(
+        "SELECT set_code, set_name, synced_at FROM card_cache_sets WHERE set_code = ?",
+        (set_code.lower(),),
+    ).fetchone()
+
+
+def get_cached_set_card(
+    conn: sqlite3.Connection, set_code: str, collector_number: str
+) -> dict[str, Any] | None:
+    """Return one exact printing from a complete cached set snapshot."""
+    row = conn.execute(
+        "SELECT c.full_json FROM card_cache_entries cc "
+        "JOIN cards c ON c.scryfall_id = cc.scryfall_id "
+        "WHERE cc.set_code = ? AND c.collector_number = ? COLLATE NOCASE "
+        "LIMIT 1",
+        (set_code.lower(), str(collector_number)),
+    ).fetchone()
+    return json.loads(row["full_json"]) if row is not None else None
+
+
 def get_cached_set_cards(conn: sqlite3.Connection, set_code: str) -> list[dict[str, Any]]:
     """Return parsed Scryfall objects in a set's current reference snapshot."""
     rows = conn.execute(

@@ -9,13 +9,14 @@ no shared global database.
 
 from __future__ import annotations
 
+import csv
 import json
 
 import httpx
 import pytest
 from typer.testing import CliRunner
 
-from mtgsets import db, scryfall
+from mtgsets import db, scryfall, wantlist
 from mtgsets.cli import app
 from mtgsets.scryfall import ScryfallClient
 
@@ -35,6 +36,49 @@ MOM_SET = {
     "digital": False,
     "released_at": "2023-04-21",
 }
+HOB_SET = {
+    "code": "hob",
+    "name": "The Hobbit",
+    "set_type": "expansion",
+    "digital": False,
+    "released_at": "2025-08-01",
+}
+HOB_CARDS = [
+    {
+        "id": "hob-94",
+        "name": "Dori, Bearer of Friends",
+        "set": "hob",
+        "set_name": "The Hobbit",
+        "collector_number": "94",
+        "lang": "en",
+        "rarity": "common",
+        "scryfall_uri": "https://scryfall.com/card/hob/94/dori-bearer-of-friends",
+        "tcgplayer_id": 600094,
+        "purchase_uris": {"tcgplayer": "https://shop.tcgplayer.test/dori"},
+    },
+    {
+        "id": "hob-91",
+        "name": "Dáin Ironfoot",
+        "set": "hob",
+        "set_name": "The Hobbit",
+        "collector_number": "91",
+        "lang": "en",
+        "rarity": "rare",
+        "scryfall_uri": "https://scryfall.com/card/hob/91/dain-ironfoot",
+        "tcgplayer_id": 600091,
+    },
+    {
+        "id": "hob-a-1",
+        "name": "Lettered Printing",
+        "set": "hob",
+        "set_name": "The Hobbit",
+        "collector_number": "A-1",
+        "lang": "en",
+        "rarity": "common",
+        "scryfall_uri": "https://scryfall.com/card/hob/A-1/lettered-printing",
+        "tcgplayer_id": None,
+    },
+]
 
 
 @pytest.fixture
@@ -70,6 +114,32 @@ def mock_scryfall(monkeypatch, neo_cards):
             return httpx.Response(
                 200, json={"data": list(sets_by_code.values()), "has_more": False}
             )
+        return httpx.Response(404, json={"details": "unexpected path"})
+
+    monkeypatch.setattr(scryfall, "_REQUEST_DELAY", 0.0)
+    monkeypatch.setattr(
+        scryfall,
+        "ScryfallClient",
+        lambda *a, **k: ScryfallClient(transport=httpx.MockTransport(handler)),
+    )
+
+
+@pytest.fixture
+def mock_want_list_scryfall(monkeypatch):
+    """Serve one unowned set and exact card lookups for want-list tests."""
+    cards_by_number = {card["collector_number"]: card for card in HOB_CARDS}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        path = request.url.path
+        if path == "/sets/hob":
+            return httpx.Response(200, json=HOB_SET)
+        if path.startswith("/sets/"):
+            return httpx.Response(404, json={"details": "Set not found"})
+        if path.startswith("/cards/hob/"):
+            number = path.removeprefix("/cards/hob/")
+            if number in cards_by_number:
+                return httpx.Response(200, json=cards_by_number[number])
+            return httpx.Response(404, json={"details": "Card not found"})
         return httpx.Response(404, json={"details": "unexpected path"})
 
     monkeypatch.setattr(scryfall, "_REQUEST_DELAY", 0.0)
@@ -349,6 +419,168 @@ def test_sync_cards_resync_refreshes_fields_and_membership(monkeypatch, neo_card
             is None
         )
         assert db.is_set_owned(conn, "neo") is False
+        assert db.get_export_entries(conn) == []
+    finally:
+        conn.close()
+
+
+# -- want-list: exact unowned printings in text/CSV (issue #88) ------------------
+
+
+def test_want_list_plain_text_is_unowned_copy_safe_and_ordered(
+    mock_want_list_scryfall, db_path
+) -> None:
+    result = runner.invoke(
+        app,
+        ["want-list", "HOB", "94", "91", "--db-path", str(db_path)],
+        color=True,
+    )
+    assert result.exit_code == 0, result.output
+    assert result.output.index("Dori, Bearer of Friends") < result.output.index("Dáin Ironfoot")
+    assert "HOB 94" in result.output and "HOB 91" in result.output
+    assert "Scryfall: https://scryfall.com/card/hob/94" in result.output
+    assert "TCGplayer:" in result.output
+    assert "\x1b" not in result.output
+    assert result.stderr == ""
+    # A cold-cache want list is entirely read-only: it doesn't even create the DB.
+    assert not db_path.exists()
+
+
+def test_want_list_csv_round_trips_unicode_commas_and_order(
+    mock_want_list_scryfall, db_path, tmp_path
+) -> None:
+    output = tmp_path / "lists" / "hob.csv"
+    result = runner.invoke(
+        app,
+        [
+            "want-list",
+            "HOB",
+            "94",
+            "91",
+            "--db-path",
+            str(db_path),
+            "--output",
+            str(output),
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert "Wrote 2 card(s)" in result.output
+    with output.open(newline="", encoding="utf-8") as handle:
+        reader = csv.DictReader(handle)
+        assert reader.fieldnames == wantlist.WANT_LIST_COLUMNS
+        rows = list(reader)
+    assert [row["Card Name"] for row in rows] == [
+        "Dori, Bearer of Friends",
+        "Dáin Ironfoot",
+    ]
+    assert [row["Collector Number"] for row in rows] == ["94", "91"]
+    assert not db_path.exists()
+
+
+def test_want_list_preferences_and_alphanumeric_collector_number(
+    mock_want_list_scryfall, db_path
+) -> None:
+    result = runner.invoke(
+        app,
+        [
+            "want-list",
+            "HOB",
+            "A-1",
+            "--quantity",
+            "2",
+            "--language",
+            "Japanese",
+            "--finish",
+            "any",
+            "--condition",
+            "Played",
+            "--db-path",
+            str(db_path),
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert "2x Lettered Printing" in result.output
+    assert "HOB A-1 | Japanese | any | condition: Played" in result.output
+
+
+def test_want_list_partial_failure_still_emits_valid_cards(
+    mock_want_list_scryfall, db_path
+) -> None:
+    result = runner.invoke(app, ["want-list", "HOB", "999", "91", "--db-path", str(db_path)])
+    assert result.exit_code == 1
+    assert "Dáin Ironfoot" in result.stdout
+    assert "Unresolved HOB 999" in result.stderr
+    assert "1 resolved, 1 unresolved" in result.stderr
+    assert "\x1b" not in result.stdout + result.stderr
+
+
+def test_want_list_partial_failure_writes_valid_csv(
+    mock_want_list_scryfall, db_path, tmp_path
+) -> None:
+    output = tmp_path / "partial.csv"
+    result = runner.invoke(
+        app,
+        [
+            "want-list",
+            "HOB",
+            "94",
+            "missing",
+            "--db-path",
+            str(db_path),
+            "-o",
+            str(output),
+        ],
+    )
+    assert result.exit_code == 1
+    with output.open(newline="", encoding="utf-8") as handle:
+        rows = list(csv.DictReader(handle))
+    assert [row["Card Name"] for row in rows] == ["Dori, Bearer of Friends"]
+    assert "Wrote 1 card(s)" in result.stdout
+    assert "1 resolved, 1 unresolved" in result.stderr
+
+
+def test_want_list_invalid_set_is_actionable_and_writes_no_csv(
+    mock_want_list_scryfall, db_path, tmp_path
+) -> None:
+    output = tmp_path / "invalid.csv"
+    result = runner.invoke(
+        app,
+        ["want-list", "ZZZ", "1", "2", "--db-path", str(db_path), "-o", str(output)],
+    )
+    assert result.exit_code == 1
+    assert "No set found with code ZZZ" in result.output
+    assert "mtgsets search ZZZ" in result.output
+    assert "0 resolved, 2 unresolved" in result.output
+    assert not output.exists()
+
+
+def test_want_list_uses_cached_unowned_set_offline(monkeypatch, db_path) -> None:
+    db.init_db(db_path)
+    conn = db.get_connection(db_path)
+    try:
+        db.replace_cached_set_cards(
+            conn,
+            set_code="hob",
+            set_name="The Hobbit",
+            raw_cards=HOB_CARDS,
+            synced_at="2026-08-10T00:00:00+00:00",
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    def unexpected_client(*args, **kwargs):
+        raise AssertionError("cached want-list lookup should not open Scryfall")
+
+    monkeypatch.setattr(scryfall, "ScryfallClient", unexpected_client)
+    result = runner.invoke(app, ["want-list", "HOB", "94", "91", "--db-path", str(db_path)])
+    assert result.exit_code == 0, result.output
+    assert result.output.index("Dori, Bearer of Friends") < result.output.index("Dáin Ironfoot")
+
+    conn = db.get_connection(db_path)
+    try:
+        assert db.is_set_owned(conn, "hob") is False
+        assert conn.execute("SELECT COUNT(*) FROM collection_entries").fetchone()[0] == 0
         assert db.get_export_entries(conn) == []
     finally:
         conn.close()

@@ -19,6 +19,7 @@ The package is three layers with a strict, one-directional dependency rule:
           ├── collection.py    ┐
           ├── stats.py         │  pure logic — no I/O
           ├── filters.py       │  (set expansion, statistics, include/exclude, CSV shaping)
+          ├── wantlist.py      │
           └── export.py        ┘
           │
           ├── db.py            ┐  I/O
@@ -50,14 +51,13 @@ belongs in `db`/`scryfall`, or it's mixing layers.
 
 ## Pure logic does no I/O
 
-`collection`, `stats`, `filters`, and `export` perform no network or database access.
-They take plain data in (raw Scryfall dicts, owned-set rows, lists) and return plain data
-or dataclasses out. This is what makes the arithmetic-heavy parts (`stats.py`) and the
-intricate parts (`filters.py`) cheap and deterministic to test.
+`collection`, `stats`, `filters`, `wantlist`, and `export` perform no network or database
+access. They take plain data in (raw Scryfall dicts, owned-set rows, lists) and return
+plain data or dataclasses out. This is what makes the arithmetic-heavy parts (`stats.py`)
+and the intricate parts (`filters.py`) cheap and deterministic to test.
 
-`export.write_moxfield_csv` touches the filesystem — that's the deliberate exception, and
-it's the format's *sink*; the row-shaping logic (`entry_to_row`, `parse_moxfield_csv`)
-stays pure.
+`export.write_moxfield_csv` and `wantlist.write_csv` touch the filesystem — those are
+deliberate format *sinks*; their row-shaping logic stays pure.
 
 ## The network boundary
 
@@ -117,3 +117,8 @@ why `preview`-before-`add` is cheap and consistent: they share the pure core.
 `db.replace_cached_set_cards`: it updates snapshot membership and card fields but never
 calls an ownership or collection-entry write. Each requested set has its own transaction
 so a failed batch item cannot roll back a successful one.
+
+`want-list` reads exact printings from that cache first and sends only misses through
+`scryfall.get_card`. Resolved raw cards are mapped and rendered by `wantlist.py`; the CLI
+does not call any database write helper. Plain output bypasses Rich entirely so stdout is
+copy/redirect-safe, while per-number errors and the partial-failure summary use stderr.

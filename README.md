@@ -109,6 +109,7 @@ mtgsets init                 # create data/collection.db
 mtgsets search neo           # find a set's code
 mtgsets preview NEO          # check what will be included/excluded
 mtgsets sync-cards MSH HOB   # cache current card data without claiming ownership
+mtgsets want-list HOB 94 91  # make a purchase list for an incomplete set
 mtgsets add NEO              # mark owned + generate card entries
 mtgsets add-multi NEO DFT MOM  # add several owned sets in one run
 mtgsets list                 # review what you own
@@ -118,6 +119,37 @@ mtgsets export moxfield      # write exports/moxfield.csv
 
 Then import `exports/moxfield.csv` into Moxfield via your collection's
 **Import** option.
+
+### Want lists for incomplete sets
+
+Turn exact collector numbers into a clean card-store list without marking the set or
+cards as owned. Plain text is the default and is safe to copy or redirect (no terminal
+color codes or alignment-dependent tables):
+
+```bash
+mtgsets want-list HOB 94 91
+```
+
+```text
+1x Dori, Bearer of Friends | The Hobbit | HOB 94 | English | nonfoil | rarity: common
+  Scryfall: https://scryfall.com/card/hob/94
+  TCGplayer: https://www.tcgplayer.com/product/...
+1x Dáin Ironfoot | The Hobbit | HOB 91 | English | nonfoil | rarity: rare
+  Scryfall: https://scryfall.com/card/hob/91
+```
+
+Give an output path for a UTF-8 spreadsheet-ready CSV:
+
+```bash
+mtgsets want-list HOB 94 91 --output exports/hob-want-list.csv
+```
+
+The CSV includes quantity, card/set names, set code, collector number, language,
+finish, condition, rarity, and Scryfall/TCGplayer lookup fields. Use `--quantity`,
+`--language`, `--finish nonfoil|foil|any`, and `--condition` to set preferences.
+Collector numbers are treated as text, so formats such as `A-1` work. Cache hits work
+offline; misses use Scryfall's exact-printing endpoint. In a mixed batch, valid cards
+are still emitted and unresolved numbers are summarized with a non-zero exit status.
 
 ### Incremental export (avoid duplicate re-imports)
 
@@ -168,6 +200,7 @@ run.
 | `mtgsets search <query>` | Search Scryfall sets by name or code substring. |
 | `mtgsets preview <set_code>` | Show the included/excluded breakdown before adding. |
 | `mtgsets sync-cards <set_code>...` | Cache current filtered card data for one or more sets without marking them owned. |
+| `mtgsets want-list <set_code> <number>...` | Resolve exact printings into a plain-text or CSV purchase list without changing ownership. |
 | `mtgsets add <set_code>` | Mark a set fully owned and generate its card entries. |
 | `mtgsets add-multi <set_code>...` | Add several sets in one run, best-effort per set. |
 | `mtgsets add-card <set_code> <number>` | Add a single card manually (coexists with full sets). |
@@ -215,6 +248,8 @@ These are intentionally separate:
   `sync-cards`, `add`, or `refresh`. Re-running `sync-cards` refreshes changed fields
   and reconciles added/removed printings. A best-effort batch reports each set and a
   summary; any failed code does not prevent the others from syncing.
+- `want-list` reads this card-data cache first and falls back to exact Scryfall lookups;
+  it never creates ownership or collection-entry rows.
 - **Owned collection data** is created only by explicit collection commands. In
   particular, `mtgsets sync-cards MSH HOB` creates no owned-set or collection-entry
   rows, so `list`, collection stats, and exports remain unchanged.
@@ -331,6 +366,7 @@ scryfall_set_collector/
     collection.py   # Set -> card-level entry generation
     stats.py        # Collection statistics (sets owned vs. total)
     export.py       # Moxfield CSV export + import
+    wantlist.py     # Plain-text / CSV card-store want lists
   data/             # local database (gitignored)
   exports/          # generated CSVs (gitignored)
   docs/DESIGN.md    # canonical schema / filter / export spec
@@ -363,9 +399,9 @@ test suite makes no network calls — the Scryfall API is mocked.
 ## Roadmap
 
 The initial CLI is complete: `init`, `search`, `preview`, `add`, `add-card`,
-`override-card`, `refresh`, `sync-cards`, `list`, `show`, `stats`, `remove`,
-`remove-card`, `import-csv`, and `export moxfield` / `export json`. Feature work is
-tracked as GitHub issues.
+`override-card`, `refresh`, `sync-cards`, `want-list`, `list`, `show`, `stats`,
+`remove`, `remove-card`, `import-csv`, and `export moxfield` / `export json`. Feature
+work is tracked as GitHub issues.
 
 ## License
 
