@@ -362,18 +362,18 @@ Preferences apply to every requested printing:
 ### Plain text (default)
 
 Plain text is line-oriented and contains no Rich markup, ANSI sequences, or aligned
-terminal columns. Each card starts with a self-contained pipe-delimited line, followed
-by available lookup URLs:
+terminal columns. Each resolved card is exactly one line containing only its card name,
+uppercase set code, and collector number, in that order:
 
 ```text
-1x Dori, Bearer of Friends | The Hobbit | HOB 94 | English | nonfoil | rarity: common
-  Scryfall: https://scryfall.com/card/hob/94
-  TCGplayer: https://www.tcgplayer.com/product/...
+Dori, Bearer of Friends HOB 94
+Dáin Ironfoot HOB 91
 ```
 
-Condition is appended as another pipe-delimited field only when supplied. A missing
-TCGplayer URL is omitted. This output is written with plain stdout rather than Rich so
-copying or redirecting it does not depend on terminal styling.
+Quantity and purchasing preferences are intentionally omitted from plain text, along
+with the full set name, rarity, and lookup URLs. They remain available in CSV output.
+Plain text is written directly to stdout rather than through Rich so copying or
+redirecting it does not depend on terminal styling.
 
 ### CSV (`--output` / `-o`)
 
@@ -384,8 +384,8 @@ Giving an output path selects CSV mode. The UTF-8 CSV has this fixed column orde
 
 Python's standard CSV quoting is used, so commas, quotes, and Unicode names round-trip.
 CSV includes Scryfall's `tcgplayer_id` and purchase URL when available; plain text shows
-the purchase URL. In either format the URL falls back to
-`https://www.tcgplayer.com/product/<id>` when only the ID exists.
+neither. The CSV URL falls back to `https://www.tcgplayer.com/product/<id>` when only
+the ID exists.
 
 Resolution is best-effort per collector number. Valid cards are still printed/written
 in a mixed batch; each failure and a final resolved/unresolved summary go to stderr,

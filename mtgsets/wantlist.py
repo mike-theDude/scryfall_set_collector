@@ -110,23 +110,7 @@ def item_from_card(
 
 def render_plain(items: Iterable[WantListItem]) -> str:
     """Render line-oriented, copy-safe text with no terminal markup."""
-    lines: list[str] = []
-    for item in items:
-        fields = [
-            f"{item.quantity}x {item.name}",
-            item.set_name,
-            f"{item.set_code.upper()} {item.collector_number}",
-            item.language,
-            item.finish.value,
-        ]
-        if item.condition:
-            fields.append(f"condition: {item.condition}")
-        if item.rarity:
-            fields.append(f"rarity: {item.rarity}")
-        lines.append(" | ".join(fields))
-        lines.append(f"  Scryfall: {item.scryfall_url}")
-        if item.tcgplayer_url:
-            lines.append(f"  TCGplayer: {item.tcgplayer_url}")
+    lines = [f"{item.name} {item.set_code.upper()} {item.collector_number}" for item in items]
     return "\n".join(lines) + ("\n" if lines else "")
 
 

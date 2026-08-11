@@ -131,12 +131,13 @@ mtgsets want-list HOB 94 91
 ```
 
 ```text
-1x Dori, Bearer of Friends | The Hobbit | HOB 94 | English | nonfoil | rarity: common
-  Scryfall: https://scryfall.com/card/hob/94
-  TCGplayer: https://www.tcgplayer.com/product/...
-1x Dáin Ironfoot | The Hobbit | HOB 91 | English | nonfoil | rarity: rare
-  Scryfall: https://scryfall.com/card/hob/91
+Dori, Bearer of Friends HOB 94
+Dáin Ironfoot HOB 91
 ```
+
+Each resolved card is exactly one line: card name, uppercase set code, then collector
+number. Quantity, preferences, rarity, and lookup URLs are omitted so the list shares
+only the card identity.
 
 Give an output path for a UTF-8 spreadsheet-ready CSV:
 
