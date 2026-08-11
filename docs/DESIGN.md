@@ -362,22 +362,24 @@ Preferences apply to every requested printing:
 ### Plain text (default)
 
 Plain text is line-oriented and contains no Rich markup, ANSI sequences, or aligned
-terminal columns. Each resolved card is exactly one line containing only its card name,
-uppercase set code, and collector number, in that order:
+terminal columns. It follows TCGplayer's documented [Mass Entry
+format](https://help.tcgplayer.com/hc/en-us/articles/360055768913-Getting-Started-With-Mass-Entry):
+each resolved card is exactly one line containing quantity `1`, its card name, its
+uppercase set code in square brackets, and its collector number, in that order:
 
 ```text
-Dori, Bearer of Friends HOB 94
-Dáin Ironfoot HOB 91
+1 Dori, Bearer of Friends [HOB] 94
+1 Dáin Ironfoot [HOB] 91
 ```
 
 For double-faced cards, the card name is the front-face portion before Scryfall's
 ` // ` separator. For example, `Tony Stark // The Invincible Iron Man` is emitted as
-`Tony Stark MSH 80`. The stored Scryfall name and CSV `Card Name` remain unchanged.
+`1 Tony Stark [MSH] 80`. The stored Scryfall name and CSV `Card Name` remain unchanged.
 
-Quantity and purchasing preferences are intentionally omitted from plain text, along
-with the full set name, rarity, and lookup URLs. They remain available in CSV output.
-Plain text is written directly to stdout rather than through Rich so copying or
-redirecting it does not depend on terminal styling.
+Plain text always uses quantity `1`; `--quantity` and the other purchasing preferences
+apply to CSV output only. The full set name, rarity, and lookup URLs also remain CSV-only.
+Plain text is written directly to stdout rather than through Rich so copying or redirecting
+it does not depend on terminal styling.
 
 ### CSV (`--output` / `-o`)
 

@@ -424,7 +424,7 @@ def test_sync_cards_resync_refreshes_fields_and_membership(monkeypatch, neo_card
         conn.close()
 
 
-# -- want-list: exact unowned printings in text/CSV (issues #88, #91) ------------
+# -- want-list: exact unowned printings in text/CSV (issues #88, #91, #95) -------
 
 
 def test_want_list_plain_text_is_unowned_copy_safe_and_ordered(
@@ -436,7 +436,7 @@ def test_want_list_plain_text_is_unowned_copy_safe_and_ordered(
         color=True,
     )
     assert result.exit_code == 0, result.output
-    assert result.stdout == "Dori, Bearer of Friends HOB 94\nDáin Ironfoot HOB 91\n"
+    assert result.stdout == "1 Dori, Bearer of Friends [HOB] 94\n1 Dáin Ironfoot [HOB] 91\n"
     assert "\x1b" not in result.output
     assert result.stderr == ""
     # A cold-cache want list is entirely read-only: it doesn't even create the DB.
@@ -514,7 +514,7 @@ def test_want_list_partial_failure_still_emits_valid_cards(
 ) -> None:
     result = runner.invoke(app, ["want-list", "HOB", "999", "91", "--db-path", str(db_path)])
     assert result.exit_code == 1
-    assert result.stdout == "Dáin Ironfoot HOB 91\n"
+    assert result.stdout == "1 Dáin Ironfoot [HOB] 91\n"
     assert "Unresolved HOB 999" in result.stderr
     assert "1 resolved, 1 unresolved" in result.stderr
     assert "\x1b" not in result.stdout + result.stderr

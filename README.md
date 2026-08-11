@@ -131,14 +131,15 @@ mtgsets want-list HOB 94 91
 ```
 
 ```text
-Dori, Bearer of Friends HOB 94
-Dáin Ironfoot HOB 91
+1 Dori, Bearer of Friends [HOB] 94
+1 Dáin Ironfoot [HOB] 91
 ```
 
-Each resolved card is exactly one line: card name, uppercase set code, then collector
-number. Quantity, preferences, rarity, and lookup URLs are omitted so the list shares
-only the card identity. Double-faced cards use only the front-face name in plain text,
-so `Tony Stark // The Invincible Iron Man` is emitted as `Tony Stark MSH 80`. CSV keeps
+Each resolved card is exactly one line in [TCGplayer Mass Entry
+format](https://help.tcgplayer.com/hc/en-us/articles/360055768913-Getting-Started-With-Mass-Entry):
+quantity `1`, card name, uppercase set code in square brackets, then collector number.
+Double-faced cards use only the front-face name in plain text, so
+`Tony Stark // The Invincible Iron Man` is emitted as `1 Tony Stark [MSH] 80`. CSV keeps
 the full Scryfall card name.
 
 Give an output path for a UTF-8 spreadsheet-ready CSV:
@@ -148,8 +149,9 @@ mtgsets want-list HOB 94 91 --output exports/hob-want-list.csv
 ```
 
 The CSV includes quantity, card/set names, set code, collector number, language,
-finish, condition, rarity, and Scryfall/TCGplayer lookup fields. Use `--quantity`,
-`--language`, `--finish nonfoil|foil|any`, and `--condition` to set preferences.
+finish, condition, rarity, and Scryfall/TCGplayer lookup fields. Plain text always uses
+quantity `1`; use `--quantity`, `--language`, `--finish nonfoil|foil|any`, and
+`--condition` to set CSV preferences.
 Collector numbers are treated as text, so formats such as `A-1` work. Cache hits work
 offline; misses use Scryfall's exact-printing endpoint. In a mixed batch, valid cards
 are still emitted and unresolved numbers are summarized with a non-zero exit status.

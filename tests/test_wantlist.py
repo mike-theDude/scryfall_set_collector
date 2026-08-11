@@ -60,7 +60,7 @@ def test_item_from_card_builds_lookup_url_fallbacks() -> None:
     assert item.tcgplayer_url == "https://www.tcgplayer.com/product/600094"
 
 
-def test_render_plain_is_copy_safe_and_preserves_order() -> None:
+def test_render_plain_is_tcgplayer_compatible_copy_safe_and_preserves_order() -> None:
     first = wantlist.item_from_card(
         sample_card(),
         quantity=2,
@@ -80,7 +80,7 @@ def test_render_plain_is_copy_safe_and_preserves_order() -> None:
     )
     text = wantlist.render_plain([first, second])
 
-    assert text == "Dori, Bearer of Friends HOB 94\nDáin Ironfoot HOB 91\n"
+    assert text == "1 Dori, Bearer of Friends [HOB] 94\n1 Dáin Ironfoot [HOB] 91\n"
     assert "\x1b" not in text
 
 
@@ -92,7 +92,7 @@ def test_render_plain_uses_front_face_name_without_changing_canonical_name() -> 
         )
     )
 
-    assert wantlist.render_plain([item]) == "Tony Stark MSH 80\n"
+    assert wantlist.render_plain([item]) == "1 Tony Stark [MSH] 80\n"
     assert item.name == combined_name
     assert wantlist.item_to_row(item)[1] == combined_name
 
