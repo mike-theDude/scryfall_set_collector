@@ -424,7 +424,7 @@ def test_sync_cards_resync_refreshes_fields_and_membership(monkeypatch, neo_card
         conn.close()
 
 
-# -- want-list: exact unowned printings in text/CSV (issue #88) ------------------
+# -- want-list: exact unowned printings in text/CSV (issues #88, #91) ------------
 
 
 def test_want_list_plain_text_is_unowned_copy_safe_and_ordered(
@@ -436,10 +436,7 @@ def test_want_list_plain_text_is_unowned_copy_safe_and_ordered(
         color=True,
     )
     assert result.exit_code == 0, result.output
-    assert result.output.index("Dori, Bearer of Friends") < result.output.index("Dáin Ironfoot")
-    assert "HOB 94" in result.output and "HOB 91" in result.output
-    assert "Scryfall: https://scryfall.com/card/hob/94" in result.output
-    assert "TCGplayer:" in result.output
+    assert result.stdout == "Dori, Bearer of Friends HOB 94\nDáin Ironfoot HOB 91\n"
     assert "\x1b" not in result.output
     assert result.stderr == ""
     # A cold-cache want list is entirely read-only: it doesn't even create the DB.
@@ -477,9 +474,10 @@ def test_want_list_csv_round_trips_unicode_commas_and_order(
     assert not db_path.exists()
 
 
-def test_want_list_preferences_and_alphanumeric_collector_number(
-    mock_want_list_scryfall, db_path
+def test_want_list_csv_preferences_and_alphanumeric_collector_number(
+    mock_want_list_scryfall, db_path, tmp_path
 ) -> None:
+    output = tmp_path / "preferences.csv"
     result = runner.invoke(
         app,
         [
@@ -494,13 +492,21 @@ def test_want_list_preferences_and_alphanumeric_collector_number(
             "any",
             "--condition",
             "Played",
+            "--output",
+            str(output),
             "--db-path",
             str(db_path),
         ],
     )
     assert result.exit_code == 0, result.output
-    assert "2x Lettered Printing" in result.output
-    assert "HOB A-1 | Japanese | any | condition: Played" in result.output
+    with output.open(newline="", encoding="utf-8") as handle:
+        row = next(csv.DictReader(handle))
+    assert row["Card Name"] == "Lettered Printing"
+    assert row["Collector Number"] == "A-1"
+    assert row["Quantity"] == "2"
+    assert row["Language"] == "Japanese"
+    assert row["Finish"] == "any"
+    assert row["Condition"] == "Played"
 
 
 def test_want_list_partial_failure_still_emits_valid_cards(
@@ -508,7 +514,7 @@ def test_want_list_partial_failure_still_emits_valid_cards(
 ) -> None:
     result = runner.invoke(app, ["want-list", "HOB", "999", "91", "--db-path", str(db_path)])
     assert result.exit_code == 1
-    assert "Dáin Ironfoot" in result.stdout
+    assert result.stdout == "Dáin Ironfoot HOB 91\n"
     assert "Unresolved HOB 999" in result.stderr
     assert "1 resolved, 1 unresolved" in result.stderr
     assert "\x1b" not in result.stdout + result.stderr

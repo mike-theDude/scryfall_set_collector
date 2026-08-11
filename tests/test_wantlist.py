@@ -61,7 +61,13 @@ def test_item_from_card_builds_lookup_url_fallbacks() -> None:
 
 
 def test_render_plain_is_copy_safe_and_preserves_order() -> None:
-    first = wantlist.item_from_card(sample_card())
+    first = wantlist.item_from_card(
+        sample_card(),
+        quantity=2,
+        language="Japanese",
+        finish=wantlist.Finish.ANY,
+        condition="Near Mint",
+    )
     second = wantlist.item_from_card(
         sample_card(
             id="hob-91",
@@ -74,11 +80,8 @@ def test_render_plain_is_copy_safe_and_preserves_order() -> None:
     )
     text = wantlist.render_plain([first, second])
 
-    assert text.index("Dori, Bearer of Friends") < text.index("Dáin Ironfoot")
-    assert "1x Dori, Bearer of Friends | The Hobbit | HOB 94" in text
-    assert "condition: Played" in text
+    assert text == "Dori, Bearer of Friends HOB 94\nDáin Ironfoot HOB 91\n"
     assert "\x1b" not in text
-    assert text.endswith("\n")
 
 
 def test_item_to_row_matches_fixed_csv_column_order() -> None:
